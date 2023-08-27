@@ -5,6 +5,7 @@
 #include <mutex>
 #include <sstream>
 #include <iomanip>
+#include <thread>
 #include <unordered_map>
 
 #include "log/logger.hpp"
@@ -16,46 +17,48 @@ namespace Sage::Log
 
 using MsgBuffer = char[1024];
 using MilliSecBuffer = char[16];
+// Max allowed buffer for POSIX thread name
+using ThreadNameBuffer = char[16];
 
 // Formatter control
 
-static const char FORMAT_END[] = "\x1B[00m";
-static const char FORMAT_BOLD[] = "\x1B[01m";
-static const char FORMAT_DISABLED[] = "\x1B[02m";
-static const char FORMAT_ITALIC[] = "\x1B[03m";
-static const char FORMAT_URL[] = "\x1B[04m";
-static const char FORMAT_BLINK[] = "\x1B[05m";
-static const char FORMAT_BLINK2[] = "\x1B[06m";
-static const char FORMAT_SELECTED[] = "\x1B[07m";
-static const char FORMAT_INVISIBLE[] = "\x1B[08m";
-static const char FORMAT_STRIKE[] = "\x1B[09m";
-static const char FORMAT_DOUBLE_UNDERLINE[] = "\x1B[21m";
+const char FORMAT_END[] = "\x1B[00m";
+const char FORMAT_BOLD[] = "\x1B[01m";
+const char FORMAT_DISABLED[] = "\x1B[02m";
+const char FORMAT_ITALIC[] = "\x1B[03m";
+const char FORMAT_URL[] = "\x1B[04m";
+const char FORMAT_BLINK[] = "\x1B[05m";
+const char FORMAT_BLINK2[] = "\x1B[06m";
+const char FORMAT_SELECTED[] = "\x1B[07m";
+const char FORMAT_INVISIBLE[] = "\x1B[08m";
+const char FORMAT_STRIKE[] = "\x1B[09m";
+const char FORMAT_DOUBLE_UNDERLINE[] = "\x1B[21m";
 
 // Dark Colours
 
-static const char DARK_BLACK[] = "\x1B[30m";
-static const char DARK_RED[] = "\x1B[31m";
-static const char DARK_GREEN[] = "\x1B[32m";
-static const char DARK_YELLOW[] = "\x1B[33m";
-static const char DARK_BLUE[] = "\x1B[34m";
-static const char DARK_VIOLET[] = "\x1B[35m";
-static const char DARK_BEIGE[] = "\x1B[36m";
-static const char DARK_WHITE[] = "\x1B[37m";
+const char DARK_BLACK[] = "\x1B[30m";
+const char DARK_RED[] = "\x1B[31m";
+const char DARK_GREEN[] = "\x1B[32m";
+const char DARK_YELLOW[] = "\x1B[33m";
+const char DARK_BLUE[] = "\x1B[34m";
+const char DARK_VIOLET[] = "\x1B[35m";
+const char DARK_BEIGE[] = "\x1B[36m";
+const char DARK_WHITE[] = "\x1B[37m";
 
 // Light Colours
 
-static const char LIGHT_GREY[] = "\x1B[90m";
-static const char LIGHT_RED[] = "\x1B[91m";
-static const char LIGHT_GREEN[] = "\x1B[92m";
-static const char LIGHT_YELLOW[] = "\x1B[93m";
-static const char LIGHT_BLUE[] = "\x1B[94m";
-static const char LIGHT_VIOLET[] = "\x1B[95m";
-static const char LIGHT_BEIGE[] = "\x1B[96m";
-static const char LIGHT_WHITE[] = "\x1B[97m";
+const char LIGHT_GREY[] = "\x1B[90m";
+const char LIGHT_RED[] = "\x1B[91m";
+const char LIGHT_GREEN[] = "\x1B[92m";
+const char LIGHT_YELLOW[] = "\x1B[93m";
+const char LIGHT_BLUE[] = "\x1B[94m";
+const char LIGHT_VIOLET[] = "\x1B[95m";
+const char LIGHT_BEIGE[] = "\x1B[96m";
+const char LIGHT_WHITE[] = "\x1B[97m";
 
 // Globals
 
-static const std::unordered_map<Level, const char*> g_levelColour
+const std::unordered_map<Level, const char*> g_levelColour
 {
     {Level::Debug,      DARK_BLUE},
     {Level::Info,       DARK_WHITE},
@@ -64,7 +67,7 @@ static const std::unordered_map<Level, const char*> g_levelColour
     {Level::Critical,   DARK_RED},
 };
 
-static const std::unordered_map<Level, const char*> g_levelInfo
+const std::unordered_map<Level, const char*> g_levelInfo
 {
     {Level::Debug,      "DEBUG"},
     {Level::Info,       "INFO "},
@@ -115,8 +118,19 @@ const char* getLevelInfo(Level level) { return g_levelInfo.at(level); }
 
 void SetLogLevel(Level logLevel) { g_currentLogLevel = logLevel; }
 
+std::string GetThreadName()
+{
+    ThreadNameBuffer threadName;
+    pthread_getname_np(pthread_self(), threadName, sizeof(threadName));
+
+    std::ostringstream oss;
+    oss << std::left << std::setw(sizeof(threadName)) << threadName;
+    return oss.str();
+}
+
 void LogToStdOut(Level logLevel, const MsgBuffer& msgBuff)
 {
+    static const thread_local std::string threadName{ GetThreadName() };
     LogTimestamp ts;
 
     {
@@ -124,6 +138,7 @@ void LogToStdOut(Level logLevel, const MsgBuffer& msgBuff)
         std::cout
             << getLevelFormatter(logLevel)
             << '[' << std::put_time(std::localtime(&ts.getSeconds()), "%d-%m-%Y %H:%M:%S") << ts.getMilliSecBuffer() << "] "
+            << '[' << threadName << "] "
             << '[' << getLevelInfo(logLevel) << "] "
             << msgBuff
             << FORMAT_END << '\n';
