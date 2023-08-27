@@ -6,10 +6,8 @@ namespace Sage::Thread
 enum class EventT
 {
     Exit,
-    Timeout,
     Test
 };
-
 
 struct Event
 {

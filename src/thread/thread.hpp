@@ -9,6 +9,7 @@
 #include <chrono>
 #include <atomic>
 
+
 namespace Sage::Thread
 {
 
@@ -16,7 +17,9 @@ using TimerMS = std::chrono::milliseconds;
 
 class Event;
 
-class ThreadI : protected std::thread
+const char* GetThreadId();
+
+class ThreadI
 {
 public:
     explicit ThreadI(const std::string& threadName);
@@ -25,7 +28,9 @@ public:
 
     const char* Name() const { return m_threadName.c_str(); }
 
-    void Shutdown();
+    void Start();
+
+    void Stop();
 
     void TransmitEvent(std::unique_ptr<Event> event);
 
@@ -36,10 +41,10 @@ public:
 protected:
     virtual void Starting() { }
 
-    virtual void Stopping() { }
-
     // main thread loop
     virtual int Execute();
+
+    virtual void Stopping() { }
 
     std::unique_ptr<Event> WaitForEvent(const TimerMS& timeout = TimerMS{ 1000 });
 
@@ -49,14 +54,16 @@ private:
     void FlushEvents();
 
     // thread entry point
-    static void Enter(ThreadI* thread);
+    void Enter();
 
 private:
     const std::string m_threadName;
-    std::atomic<bool> m_running;
+    std::mutex m_threadCreationMtx;
+    std::thread m_thread;
     std::mutex m_eventQueueMtx;
     std::condition_variable m_eventQueueCndVar;
     std::queue<std::unique_ptr<Event>> m_eventQueue;
+    std::atomic<bool> m_running;
     std::atomic<int> m_exitCode;
 
 private:

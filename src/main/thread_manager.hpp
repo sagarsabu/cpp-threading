@@ -2,9 +2,9 @@
 
 #include <memory>
 #include <set>
+#include <atomic>
 
 #include "thread/thread.hpp"
-
 
 namespace Sage::Thread
 {
@@ -12,13 +12,7 @@ namespace Sage::Thread
 class ManagerThread final : public ThreadI
 {
 public:
-    static inline bool EXIT_REQUESTED{ false };
-    static inline std::mutex EXIT_REQ_MTX;
-    static inline std::condition_variable EXIT_REQ_CND_VAR;
-
-    static inline bool SHUTDOWN_COMPLETED{ false };
-    static inline std::mutex SHUTDOWN_COMPLETE_MTX;
-    static inline std::condition_variable SHUTDOWN_CND_VAR;
+    static const inline TimerMS TEARDOWN_THRESHOLD{ 1000 };
 
 public:
     ManagerThread();
@@ -27,8 +21,11 @@ public:
 
     void TeardownWorkers();
 
-    // Signal handler for interrupt
-    static void SignalHandler(int);
+    void RequestExit();
+
+    void WaitForExit();
+
+    void WaitUntilShutdown();
 
 private:
     int Execute() override;
@@ -42,6 +39,12 @@ private:
 private:
     std::set<ThreadI*> m_workers;
     std::atomic<bool> m_workersTerminated;
+    std::atomic<bool> m_exitRequested;
+    std::mutex m_exitReqMtx;
+    std::condition_variable m_exitReqCndVar;
+    std::atomic<bool> m_shutdownComplete;
+    std::mutex m_shutdownCompleteMtx;
+    std::condition_variable m_shutdownCompleteCndVar;
 };
 
 } // namespace Sage::Thread

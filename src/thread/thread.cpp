@@ -2,6 +2,7 @@
 #include <queue>
 #include <memory>
 #include <string>
+#include <cassert>
 
 #include "log/logger.hpp"
 #include "thread/thread.hpp"
@@ -9,54 +10,76 @@
 
 using namespace std::chrono_literals;
 
-
 namespace Sage::Thread
 {
 
+const char* GetThreadId()
+{
+    std::ostringstream os;
+    os << std::hex << std::uppercase << std::this_thread::get_id();
+
+    return os.str().c_str();
+}
+
 ThreadI::ThreadI(const std::string& threadName) :
-    std::thread{ ThreadI::Enter, this },
     m_threadName{ threadName },
-    m_running{ false },
+    m_threadCreationMtx{},
+    m_thread{},
     m_eventQueueMtx{},
     m_eventQueueCndVar{},
     m_eventQueue{},
+    m_running{ false },
     m_exitCode{ 0 }
 {
-    Log::info("%s c'tor", Name());
+    Log::Debug("%s c'tor", Name());
 }
-
 
 ThreadI::~ThreadI()
 {
-    Log::info("%s d'tor", Name());
+    Log::Debug("%s d'tor", Name());
 
-    if (joinable())
+    if (m_thread.joinable())
     {
-        Log::info("%s joining...", Name());
-        join();
+        Log::Debug("%s joining...", Name());
+        m_thread.join();
     }
 }
-
 
 void ThreadI::TransmitEvent(std::unique_ptr<Event> event)
 {
     if (m_running)
     {
-        std::unique_lock lock{ m_eventQueueMtx };
-        m_eventQueue.emplace(std::move(event));
+        std::scoped_lock lock{ m_eventQueueMtx };
+        m_eventQueue.push(std::move(event));
     }
 
+    // Always notify the running thread
     m_eventQueueCndVar.notify_one();
 }
 
-
-void ThreadI::Shutdown()
+void ThreadI::Start()
 {
-    FlushEvents();
-    Log::info("%s received exit request", Name());
-    TransmitEvent(std::make_unique<Event>(EventT::Exit));
+    Log::Info("%s start requested", Name());
+
+    {
+        std::scoped_lock lock{ m_threadCreationMtx };
+        if (m_running)
+        {
+            Log::Critical("%s started when already running", Name());
+            return;
+        }
+
+        m_thread = std::thread(&ThreadI::Enter, this);
+    }
 }
 
+void ThreadI::Stop()
+{
+    Log::Info("%s stop requested", Name());
+
+    FlushEvents();
+    TransmitEvent(std::make_unique<Event>(EventT::Exit));
+}
 
 int ThreadI::Execute()
 {
@@ -66,13 +89,13 @@ int ThreadI::Execute()
         // Timeout
         if (event == nullptr)
         {
-            Log::info("%s received timeout", Name());
+            Log::Info("%s received timeout", Name());
             continue;
         }
 
         if (event->Type() == EventT::Exit)
         {
-            Log::info("%s received exit event", Name());
+            Log::Info("%s received exit event", Name());
             break;
         }
 
@@ -81,94 +104,105 @@ int ThreadI::Execute()
     return 0;
 }
 
-// FIXME. This is blocking the transmitter
 std::unique_ptr<Event> ThreadI::WaitForEvent(const TimerMS& timeout)
 {
-    std::unique_lock lock{ m_eventQueueMtx };
-    bool hasEvent = m_eventQueueCndVar.wait_for(
-        lock,
-        timeout,
-        [this] { return not m_eventQueue.empty(); }
-    );
+    bool hasEvent{ false };
+    size_t nEventsToHandle{ 0 };
+
+    {
+        // Need a moveable lock
+        std::unique_lock lock{ m_eventQueueMtx };
+        hasEvent = m_eventQueueCndVar.wait_for(
+            lock,
+            timeout,
+            [this] { return not m_eventQueue.empty(); }
+        );
+        nEventsToHandle = m_eventQueue.size();
+    }
 
     // Timeout
     if (not hasEvent)
         return nullptr;
 
     std::unique_ptr<Event> unhandledEvent{ nullptr };
-    size_t nHandledEvents{ 0 };
-    while (not m_eventQueue.empty())
+    size_t eventsHandled{ 0 };
+    // Don't hold other threads from pushing events to this thread
+    for (; eventsHandled < std::min(nEventsToHandle, MAX_EVENTS_PER_POLL); ++eventsHandled)
     {
-        auto event = std::move(m_eventQueue.front());
-        m_eventQueue.pop();
-        bool eventHandled{ true };
+        std::unique_ptr<Event> event{ nullptr };
+        {
+            std::scoped_lock lock{ m_eventQueueMtx };
+            event = std::move(m_eventQueue.front());
+            m_eventQueue.pop();
+        }
 
+        bool eventHandled{ false };
         switch (event->Type())
         {
-        case EventT::Exit:
-            eventHandled = false;
-            break;
+            case EventT::Exit:
+                break;
 
-        default:
-            HandleEvent(std::move(event));
-            break;
+            default:
+            {
+                HandleEvent(std::move(event));
+                eventHandled = true;
+                break;
+            }
         }
 
-        if (eventHandled)
-        {
-            ++nHandledEvents;
-        }
-        else
+        if (not eventHandled)
         {
             // Push event upwards
             unhandledEvent = std::move(event);
             break;
         }
-
-        // Don't hold other threads from pushing events to this thread
-        if (nHandledEvents > MAX_EVENTS_PER_POLL)
-        {
-            Log::info("%s WaitForEvents max events handled for this poll. threshold:%ld current-queue-size:%ld",
-                Name(), MAX_EVENTS_PER_POLL, m_eventQueue.size());
-            break;
-        }
     }
 
-    Log::info("%s WaitForEvents handled '%ld' events", Name(), nHandledEvents);
+    if (eventsHandled >= MAX_EVENTS_PER_POLL)
+    {
+        Log::Warning("%s wait-for-events max events exceeded threshold:%ld n-handled-events:%ld n-received-events:ld",
+            Name(), MAX_EVENTS_PER_POLL, eventsHandled, nEventsToHandle);
+    }
+    else
+    {
+        Log::Debug("%s wait-for-events n-received-events:%ld", Name(), eventsHandled);
+    }
+
     return unhandledEvent;
 }
 
-
 void ThreadI::FlushEvents()
 {
-    std::unique_lock lock{ m_eventQueueMtx };
+    std::scoped_lock lock{ m_eventQueueMtx };
 
-    Log::info("%s Flushing %ld events", Name(), m_eventQueue.size());
+    if (not m_eventQueue.empty())
+    {
+        Log::Warning("%s flushing %ld events", Name(), m_eventQueue.size());
+    }
+
     while (not m_eventQueue.empty())
     {
         m_eventQueue.pop();
     }
-    Log::info("%s Flushed all events", Name());
+
+    Log::Info("%s flushed all events", Name());
 }
 
-
-void ThreadI::Enter(ThreadI* thread)
+void ThreadI::Enter()
 {
     pthread_t self = pthread_self();
-    pthread_setname_np(self, thread->Name());
+    pthread_setname_np(self, Name());
 
-    Log::info("%s Starting", thread->Name());
-    thread->Starting();
+    Log::Info("%s starting", Name());
+    Starting();
 
-    thread->m_running = true;
+    Log::Info("%s executing ", Name());
+    m_running = true;
+    m_exitCode = Execute();
+    m_running = false;
 
-    Log::info("%s Executing ", thread->Name());
-    thread->m_exitCode = thread->Execute();
-
-    thread->m_running = false;
-
-    Log::info("%s Stopping", thread->Name());
-    thread->Stopping();
+    Log::Info("%s stopping", Name());
+    Stopping();
 }
 
 } // namespace Sage::Thread

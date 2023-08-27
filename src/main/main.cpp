@@ -11,18 +11,20 @@
 #include "thread/events.hpp"
 #include "main/thread_manager.hpp"
 
-
 using namespace std::chrono_literals;
-
+using namespace Sage;
+using namespace Sage::Thread;
 
 namespace Sage::Thread
 {
 
+std::atomic<ManagerThread*> g_managerThread{ nullptr };
+
 class WorkerThread final : public ThreadI
 {
 public:
-    explicit WorkerThread(int id) :
-        ThreadI{ std::string("WkrThread-") + std::to_string(id) }
+    WorkerThread() :
+        ThreadI{ std::string("WkrThread-") + std::to_string(++s_id) }
     { }
 
 private:
@@ -30,58 +32,63 @@ private:
     {
         switch (event->Type())
         {
-        case EventT::Test:
-            Log::info("%s HandleEvent Test. Sleeping for 500 ms", Name());
-            std::this_thread::sleep_for(500ms);
-            break;
+            case EventT::Test:
+            {
+                Log::Info("%s handle-event 'Test'. sleeping for %ld ms",
+                    Name(), s_testWaitTime.count());
+                std::this_thread::sleep_for(s_testWaitTime);
+                break;
+            }
 
-        default:
-            Log::info("%s HandleEvent unknown event", Name());
-            break;
+            default:
+                Log::Error("%s handle-event unknown event", Name());
+                break;
         }
-
     }
 
+private:
+    static inline std::atomic<uint> s_id{ 0 };
+    static const inline TimerMS s_testWaitTime{ 150 };
 };
 
 } // namespace Sage::Thread
 
+void SignalHandler(int signal)
+{
+    Log::Info("SignalHandler received signal:%d", signal);
+    if (g_managerThread != nullptr)
+    {
+        (*g_managerThread).RequestExit();
+    }
+}
 
 auto main(void) -> int
 {
-    using namespace Sage::Thread;
+    std::signal(SIGINT, SignalHandler);
+    std::signal(SIGQUIT, SignalHandler);
+    std::signal(SIGKILL, SignalHandler);
 
-    std::signal(SIGINT, ManagerThread::SignalHandler);
-    std::signal(SIGTERM, ManagerThread::SignalHandler);
+    Log::SetLogLevel(Log::Level::Debug);
 
     ManagerThread manager;
-    std::vector<WorkerThread*> workers(1, nullptr);
+    g_managerThread = &manager;
+    manager.Start();
 
-    int idx = 1;
-    for (auto worker : workers)
+    std::array<WorkerThread, 5> workers;
+    for (auto& worker : workers)
     {
-        worker = new WorkerThread{ idx++ };
-        manager.AttachWorker(worker);
+        worker.Start();
+        manager.AttachWorker(&worker);
     }
 
-    {
-        std::unique_lock lock{ ManagerThread::EXIT_REQ_MTX };
-        ManagerThread::EXIT_REQ_CND_VAR.wait(lock, [] { return ManagerThread::EXIT_REQUESTED; });
-    }
+    // Make sure main thread waits until exit is requested
+    manager.WaitForExit();
 
     manager.TeardownWorkers();
-    for (auto worker : workers)
-    {
-        delete worker;
-        worker = nullptr;
-    }
+    manager.Stop();
 
-    manager.Shutdown();
-
-    {
-        std::unique_lock lock{ ManagerThread::SHUTDOWN_COMPLETE_MTX };
-        ManagerThread::SHUTDOWN_CND_VAR.wait(lock, [] { return ManagerThread::SHUTDOWN_COMPLETED; });
-    }
+    // Make sure main thread waits until shutdown is complete
+    manager.WaitUntilShutdown();
 
     return manager.ExitCode();
 }
