@@ -15,12 +15,8 @@ ManagerThread::ManagerThread() :
     ThreadI{ "MngrThread" },
     m_workers{},
     m_workersTerminated{ false },
-    m_exitRequested{ false },
-    m_exitReqMtx{},
-    m_exitReqCndVar{},
-    m_shutdownComplete{ false },
-    m_shutdownCompleteMtx{},
-    m_shutdownCompleteCndVar{}
+    m_exitSignal{ 0 },
+    m_shutdownSignal{ 0 }
 { }
 
 void ManagerThread::AttachWorker(ThreadI* worker)
@@ -28,89 +24,73 @@ void ManagerThread::AttachWorker(ThreadI* worker)
     m_workers.emplace(worker);
 }
 
-void ManagerThread::TeardownWorkers()
-{
-    Log::Info("%s tearing down all workers", Name());
-
-    m_workersTerminated = true;
-
-    for (auto worker : m_workers)
-    {
-        Log::Info("%s stopping %s", Name(), worker->Name());
-        worker->Stop();
-    }
-
-    auto teardownStart = std::chrono::high_resolution_clock::now();
-    while (WorkersStillRunning())
-    {
-        std::this_thread::sleep_for(100ms);
-
-        auto now = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - teardownStart);
-        if (duration >= TEARDOWN_THRESHOLD)
-        {
-            Log::Critical("%s tearing down duration:%ld exceeded threshold duration:%ld ms",
-                Name(), duration.count(), TEARDOWN_THRESHOLD.count());
-            break;
-        }
-
-        Log::Info("%s tearing down duration:%ld", Name(), duration.count());
-    }
-}
-
 void  ManagerThread::RequestExit()
 {
-    Log::Info("%s exit requested from thread:[0x%s]", Name(), GetThreadId());
-
-    std::unique_lock lock{ m_exitReqMtx };
-    m_exitRequested = true;
-    m_exitReqCndVar.notify_one();
+    Log::Info("%s exit requested", Name());
+    m_exitSignal.release();
 }
 
 void ManagerThread::WaitForExit()
 {
-    Log::Info("%s waiting for exit in thread:[0x%s] ...",
-        Name(), GetThreadId());
+    Log::Info("%s waiting for exit request...",
+        Name());
+    m_exitSignal.acquire();
+    Log::Info("%s waiting for exit triggered...",
+        Name());
 
-    std::unique_lock lock{ m_exitReqMtx };
-    m_exitReqCndVar.wait(lock, [this]()->bool { return m_exitRequested; });
+    TransmitEvent(std::make_unique<ManagerTeardownEvent>());
 }
 
-void ManagerThread::WaitUntilShutdown()
+void ManagerThread::WaitUntilWorkersShutdown()
 {
-    Log::Info("%s waiting for shutdown in thread:[0x%s]", Name(), GetThreadId());
+    Log::Info("%s waiting until shutdown requested", Name());
 
-    std::unique_lock lock{ m_shutdownCompleteMtx };
-    m_shutdownCompleteCndVar.wait(lock, [this]()->bool { return m_shutdownComplete; });
-}
+    m_shutdownSignal.acquire();
 
-int ManagerThread::Execute()
-{
-    int nFailedWorkers{ 0 };
+    Log::Info("%s workers shutdown starting", Name());
+    auto teardownStart = std::chrono::high_resolution_clock::now();
 
-    while (true)
+    while (WorkersRunning())
     {
-        auto event = WaitForEvent(100ms);
-        // Timeout
-        if (event == nullptr)
-        {
-            SendEventsToWorkers();
-            continue;
-        }
+        std::this_thread::sleep_for(20ms);
+        auto now = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<TimeMS>(now - teardownStart);
 
-        if (event->Type() == EventT::Exit)
+        if (duration >= TEARDOWN_THRESHOLD)
         {
-            Log::Info("%s received exit event", Name());
+            Log::Critical("%s workers shutdown duration:%ld exceeded threshold duration:%ld ms",
+                Name(), duration.count(), TEARDOWN_THRESHOLD.count());
             break;
         }
+        Log::Info("%s workers shutdown duration:%ld", Name(), duration.count());
     }
 
-    for (auto worker : m_workers)
+    Log::Info("%s workers shutdown complete", Name());
+}
+
+void ManagerThread::WaitUntilManagerShutdown()
+{
+    Stop();
+
+    Log::Info("%s manager shutdown starting", Name());
+    auto teardownStart = std::chrono::high_resolution_clock::now();
+
+    while (IsRunning())
     {
-        nFailedWorkers += (worker->ExitCode() != 0);
+        std::this_thread::sleep_for(20ms);
+        auto now = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<TimeMS>(now - teardownStart);
+
+        if (duration >= TEARDOWN_THRESHOLD)
+        {
+            Log::Critical("%s manager shutdown duration:%ld exceeded threshold duration:%ld ms",
+                Name(), duration.count(), TEARDOWN_THRESHOLD.count());
+            break;
+        }
+        Log::Info("%s manager shutdown duration:%ld", Name(), duration.count());
     }
 
-    return nFailedWorkers;
+    Log::Info("%s manager shutdown complete", Name());
 }
 
 void ManagerThread::SendEventsToWorkers()
@@ -124,21 +104,32 @@ void ManagerThread::SendEventsToWorkers()
     for (auto worker : m_workers)
     {
         Log::Debug("%s sending work to %s", Name(), worker->Name());
-        worker->TransmitEvent(std::make_unique<Event>(EventT::Test));
+        worker->TransmitEvent(std::make_unique<ManagerTestEvent>(TEST_TIMEOUT));
         Log::Debug("%s completed sending work to %s", Name(), worker->Name());
     }
 }
 
-void ManagerThread::Stopping()
+void ManagerThread::TeardownWorkers()
 {
-    Log::Info("%s stopping...", Name());
+    Log::Info("%s tearing down all workers", Name());
 
-    std::unique_lock lock{ m_shutdownCompleteMtx };
-    m_shutdownComplete = true;
-    m_shutdownCompleteCndVar.notify_one();
+    m_workersTerminated = true;
+    for (auto worker : m_workers)
+    {
+        Log::Info("%s stopping %s", Name(), worker->Name());
+        worker->Stop();
+    }
+
+    Log::Info("%s tore down all workers", Name());
 }
 
-bool ManagerThread::WorkersStillRunning() const
+void  ManagerThread::RequestShutdown()
+{
+    Log::Info("%s shutdown requested", Name());
+    m_shutdownSignal.release();
+}
+
+bool ManagerThread::WorkersRunning() const
 {
     bool aWorkerIsRunning = std::any_of(
         m_workers.cbegin(),
@@ -146,6 +137,70 @@ bool ManagerThread::WorkersStillRunning() const
         [](const ThreadI* worker) { return worker->IsRunning(); }
     );
     return aWorkerIsRunning;
+}
+
+void ManagerThread::Stopping()
+{
+    Log::Info("%s stopping...", Name());
+}
+
+int ManagerThread::Execute()
+{
+    int nFailedWorkers{ 0 };
+    bool exitRequested{ false };
+    while (not exitRequested)
+    {
+        auto event = WaitForEvent(50ms);
+
+        // Timeout
+        if (event == nullptr)
+        {
+            SendEventsToWorkers();
+            continue;
+        }
+
+        switch (event->Type())
+        {
+            case EventT::Exit:
+            {
+                Log::Info("%s received exit event", Name());
+                exitRequested = true;
+                break;
+            }
+
+            default:
+            {
+                Log::Error("%s execute got unkown event:%d", Name(), event->Type());
+                break;
+            }
+        }
+    }
+
+    for (auto worker : m_workers)
+    {
+        nFailedWorkers += (worker->ExitCode() != 0);
+    }
+
+    return nFailedWorkers;
+}
+
+void ManagerThread::HandleEvent(ThreadEvent event)
+{
+    switch (event->Type())
+    {
+        case ManagerEventT::TeardownWorkers:
+        {
+            TeardownWorkers();
+            RequestShutdown();
+            break;
+        }
+
+        default:
+        {
+            Log::Error("%s handle-event got unkown event:%d", Name(), event->Type());
+            break;
+        }
+    }
 }
 
 } // namespace Sage::Thread

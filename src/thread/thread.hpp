@@ -16,11 +16,9 @@ namespace Sage::Thread
 
 class Event;
 
-const char* GetThreadId();
-
 // Aliases
 
-using TimerMS = std::chrono::milliseconds;
+using TimeMS = std::chrono::milliseconds;
 using ThreadEvent = std::unique_ptr<Event>;
 
 class ThreadI
@@ -50,9 +48,9 @@ protected:
 
     virtual void Stopping() { }
 
-    ThreadEvent WaitForEvent(const TimerMS& timeout = TimerMS{ 1000 });
+    ThreadEvent WaitForEvent(const TimeMS& timeout = TimeMS{ 1000 });
 
-    virtual void HandleEvent(ThreadEvent /**event*/) { };
+    virtual void HandleEvent(ThreadEvent event);
 
 private:
     // thread entry point
@@ -66,7 +64,7 @@ private:
     std::thread m_thread;
     std::mutex m_eventQueueMtx;
     std::queue<ThreadEvent> m_eventQueue;
-    std::binary_semaphore m_eventQueueSmp;
+    std::binary_semaphore m_eventSignal;
     std::atomic<bool> m_running;
     std::atomic<int> m_exitCode;
 

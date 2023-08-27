@@ -3,8 +3,6 @@
 #include <atomic>
 #include <csignal>
 #include <memory>
-#include <set>
-#include <algorithm>
 
 #include "log/logger.hpp"
 #include "thread/thread.hpp"
@@ -32,23 +30,23 @@ private:
     {
         switch (event->Type())
         {
-            case EventT::Test:
+            case ManagerEventT::Test:
             {
+                auto& rxEvent = static_cast<ManagerTestEvent&>(*event);
                 Log::Info("%s handle-event 'Test'. sleeping for %ld ms",
-                    Name(), s_testWaitTime.count());
-                std::this_thread::sleep_for(s_testWaitTime);
+                    Name(), rxEvent.m_timeout.count());
+                std::this_thread::sleep_for(rxEvent.m_timeout);
                 break;
             }
 
             default:
-                Log::Error("%s handle-event unknown event", Name());
+                Log::Error("%s handle-event unknown event:%d", Name(), event->Type());
                 break;
         }
     }
 
 private:
     static inline std::atomic<uint> s_id{ 0 };
-    static const inline TimerMS s_testWaitTime{ 150 };
 };
 
 } // namespace Sage::Thread
@@ -74,7 +72,7 @@ auto main(void) -> int
     g_managerThread = &manager;
     manager.Start();
 
-    std::array<WorkerThread, 5> workers;
+    std::array<WorkerThread, 10> workers;
     for (auto& worker : workers)
     {
         worker.Start();
@@ -83,12 +81,9 @@ auto main(void) -> int
 
     // Make sure main thread waits until exit is requested
     manager.WaitForExit();
-
-    manager.TeardownWorkers();
-    manager.Stop();
-
     // Make sure main thread waits until shutdown is complete
-    manager.WaitUntilShutdown();
+    manager.WaitUntilWorkersShutdown();
+    manager.WaitUntilManagerShutdown();
 
     return manager.ExitCode();
 }

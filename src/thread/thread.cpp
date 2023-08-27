@@ -7,19 +7,12 @@
 #include "log/logger.hpp"
 #include "thread/thread.hpp"
 #include "thread/events.hpp"
+#include "thread/timer.hpp"
 
 using namespace std::chrono_literals;
 
 namespace Sage::Thread
 {
-
-const char* GetThreadId()
-{
-    std::ostringstream os;
-    os << std::hex << std::uppercase << std::this_thread::get_id();
-
-    return os.str().c_str();
-}
 
 ThreadI::ThreadI(const std::string& threadName) :
     m_threadName{ threadName },
@@ -27,7 +20,7 @@ ThreadI::ThreadI(const std::string& threadName) :
     m_thread{},
     m_eventQueueMtx{},
     m_eventQueue{},
-    m_eventQueueSmp{ 0 },
+    m_eventSignal{ 0 },
     m_running{ false },
     m_exitCode{ 0 }
 {
@@ -75,7 +68,7 @@ void ThreadI::TransmitEvent(ThreadEvent event)
     {
         std::lock_guard lock{ m_eventQueueMtx };
         m_eventQueue.push(std::move(event));
-        m_eventQueueSmp.release();
+        m_eventSignal.release();
     }
     else
     {
@@ -92,7 +85,6 @@ int ThreadI::Execute()
         // Timeout
         if (event == nullptr)
         {
-            Log::Debug("%s received timeout", Name());
             continue;
         }
 
@@ -117,9 +109,10 @@ int ThreadI::Execute()
     return 0;
 }
 
-ThreadEvent ThreadI::WaitForEvent(const TimerMS& timeout)
+ThreadEvent ThreadI::WaitForEvent(const TimeMS& timeout)
 {
-    bool hasEvent = m_eventQueueSmp.try_acquire_for(timeout);
+    ScopeTimer timer{ m_threadName + "@WaitForEvent" };
+    bool hasEvent = m_eventSignal.try_acquire_for(timeout);
     if (not hasEvent)
     {
         // Timeout
@@ -153,6 +146,7 @@ ThreadEvent ThreadI::WaitForEvent(const TimerMS& timeout)
 
             default:
             {
+                ScopeTimer handleTimer{ m_threadName + "@WaitForEvent::HandleTimer::" + std::to_string(event->Type()) };
                 HandleEvent(std::move(event));
                 eventHandled = true;
                 ++eventsHandled;
@@ -174,7 +168,7 @@ ThreadEvent ThreadI::WaitForEvent(const TimerMS& timeout)
     if (tooManyEvents or hasUnhandledEvent)
     {
         // More to do on next loop so notify ourselves
-        m_eventQueueSmp.release();
+        m_eventSignal.release();
     }
 
     if (tooManyEvents)
@@ -188,6 +182,11 @@ ThreadEvent ThreadI::WaitForEvent(const TimerMS& timeout)
     }
 
     return unhandledEvent;
+}
+
+void ThreadI::HandleEvent(ThreadEvent event)
+{
+    Log::Warning("%s default handle-event discarding event:%d", Name(), event->Type());
 }
 
 void ThreadI::Enter()
