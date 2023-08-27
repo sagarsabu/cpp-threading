@@ -5,19 +5,23 @@
 #include <memory>
 #include <string>
 #include <mutex>
-#include <condition_variable>
+#include <semaphore>
 #include <chrono>
 #include <atomic>
-
 
 namespace Sage::Thread
 {
 
-using TimerMS = std::chrono::milliseconds;
+// Forward declaration
 
 class Event;
 
 const char* GetThreadId();
+
+// Aliases
+
+using TimerMS = std::chrono::milliseconds;
+using ThreadEvent = std::unique_ptr<Event>;
 
 class ThreadI
 {
@@ -32,7 +36,7 @@ public:
 
     void Stop();
 
-    void TransmitEvent(std::unique_ptr<Event> event);
+    void TransmitEvent(ThreadEvent event);
 
     int ExitCode() const { return m_exitCode; }
 
@@ -46,28 +50,28 @@ protected:
 
     virtual void Stopping() { }
 
-    std::unique_ptr<Event> WaitForEvent(const TimerMS& timeout = TimerMS{ 1000 });
+    ThreadEvent WaitForEvent(const TimerMS& timeout = TimerMS{ 1000 });
 
-    virtual void HandleEvent(std::unique_ptr<Event> /**event*/) { };
+    virtual void HandleEvent(ThreadEvent /**event*/) { };
 
 private:
-    void FlushEvents();
-
     // thread entry point
     void Enter();
+
+    void FlushEvents();
 
 private:
     const std::string m_threadName;
     std::mutex m_threadCreationMtx;
     std::thread m_thread;
     std::mutex m_eventQueueMtx;
-    std::condition_variable m_eventQueueCndVar;
-    std::queue<std::unique_ptr<Event>> m_eventQueue;
+    std::queue<ThreadEvent> m_eventQueue;
+    std::binary_semaphore m_eventQueueSmp;
     std::atomic<bool> m_running;
     std::atomic<int> m_exitCode;
 
 private:
-    static constexpr size_t MAX_EVENTS_PER_POLL{ 10 };
+    static constexpr size_t MAX_EVENTS_PER_LOOP{ 10 };
 };
 
 } // namespace Sage::Thread

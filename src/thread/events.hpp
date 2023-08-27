@@ -3,23 +3,32 @@
 namespace Sage::Thread
 {
 
-enum class EventT
+enum EventT
 {
-    Exit,
-    Test
+    Exit = 0,
+    ManagerStart = 1000
 };
 
 struct Event
 {
-    explicit Event(EventT evenType) : m_evenType{ evenType } { }
-
     virtual ~Event() = default;
 
-    EventT Type() const { return m_evenType; }
+    int Type() const { return m_evenType; }
+
+protected:
+    explicit Event(int evenType) : m_evenType{ evenType } { }
 
 private:
-    const EventT m_evenType;
+    const int m_evenType;
 };
+
+struct ExitEvent final : public Event
+{
+    ExitEvent() :
+        Event{ EventT::Exit }
+    { }
+};
+
 
 } // namespace Sage::Thread
 

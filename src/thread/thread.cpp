@@ -26,8 +26,8 @@ ThreadI::ThreadI(const std::string& threadName) :
     m_threadCreationMtx{},
     m_thread{},
     m_eventQueueMtx{},
-    m_eventQueueCndVar{},
     m_eventQueue{},
+    m_eventQueueSmp{ 0 },
     m_running{ false },
     m_exitCode{ 0 }
 {
@@ -45,24 +45,12 @@ ThreadI::~ThreadI()
     }
 }
 
-void ThreadI::TransmitEvent(std::unique_ptr<Event> event)
-{
-    if (m_running)
-    {
-        std::scoped_lock lock{ m_eventQueueMtx };
-        m_eventQueue.push(std::move(event));
-    }
-
-    // Always notify the running thread
-    m_eventQueueCndVar.notify_one();
-}
-
 void ThreadI::Start()
 {
     Log::Info("%s start requested", Name());
 
     {
-        std::scoped_lock lock{ m_threadCreationMtx };
+        std::lock_guard lock{ m_threadCreationMtx };
         if (m_running)
         {
             Log::Critical("%s started when already running", Name());
@@ -78,60 +66,81 @@ void ThreadI::Stop()
     Log::Info("%s stop requested", Name());
 
     FlushEvents();
-    TransmitEvent(std::make_unique<Event>(EventT::Exit));
+    TransmitEvent(std::make_unique<ExitEvent>());
+}
+
+void ThreadI::TransmitEvent(ThreadEvent event)
+{
+    if (m_running)
+    {
+        std::lock_guard lock{ m_eventQueueMtx };
+        m_eventQueue.push(std::move(event));
+        m_eventQueueSmp.release();
+    }
+    else
+    {
+        Log::Critical("%s transmit-event dropped event:%d", Name(), event->Type());
+    }
 }
 
 int ThreadI::Execute()
 {
-    while (true)
+    bool exitRequested{ false };
+    while (not exitRequested)
     {
-        std::unique_ptr<Event> event = WaitForEvent();
+        ThreadEvent event = WaitForEvent();
         // Timeout
         if (event == nullptr)
         {
-            Log::Info("%s received timeout", Name());
+            Log::Debug("%s received timeout", Name());
             continue;
         }
 
-        if (event->Type() == EventT::Exit)
+        switch (event->Type())
         {
-            Log::Info("%s received exit event", Name());
-            break;
-        }
+            case EventT::Exit:
+            {
+                Log::Info("%s received exit event", Name());
+                exitRequested = true;
+                break;
+            }
 
+
+            default:
+            {
+                Log::Error("%s default execute got unkown event:%d", Name(), event->Type());
+                break;
+            }
+        }
     }
 
     return 0;
 }
 
-std::unique_ptr<Event> ThreadI::WaitForEvent(const TimerMS& timeout)
+ThreadEvent ThreadI::WaitForEvent(const TimerMS& timeout)
 {
-    bool hasEvent{ false };
-    size_t nEventsToHandle{ 0 };
-
+    bool hasEvent = m_eventQueueSmp.try_acquire_for(timeout);
+    if (not hasEvent)
     {
-        // Need a moveable lock
-        std::unique_lock lock{ m_eventQueueMtx };
-        hasEvent = m_eventQueueCndVar.wait_for(
-            lock,
-            timeout,
-            [this] { return not m_eventQueue.empty(); }
-        );
-        nEventsToHandle = m_eventQueue.size();
+        // Timeout
+        return nullptr;
     }
 
-    // Timeout
-    if (not hasEvent)
-        return nullptr;
-
-    std::unique_ptr<Event> unhandledEvent{ nullptr };
-    size_t eventsHandled{ 0 };
-    // Don't hold other threads from pushing events to this thread
-    for (; eventsHandled < std::min(nEventsToHandle, MAX_EVENTS_PER_POLL); ++eventsHandled)
+    size_t currentQueueSize{ 0 };
     {
-        std::unique_ptr<Event> event{ nullptr };
+        std::lock_guard lock{ m_eventQueueMtx };
+        currentQueueSize = m_eventQueue.size();
+    }
+
+    ThreadEvent unhandledEvent{ nullptr };
+    // Don't hold other threads from pushing events to this thread
+    size_t eventsToHandleThisLoop{ std::min(currentQueueSize, MAX_EVENTS_PER_LOOP) };
+    size_t eventsHandled{ 0 };
+    while (eventsHandled < eventsToHandleThisLoop)
+    {
+        ThreadEvent event{ nullptr };
         {
-            std::scoped_lock lock{ m_eventQueueMtx };
+            std::lock_guard lock{ m_eventQueueMtx };
             event = std::move(m_eventQueue.front());
             m_eventQueue.pop();
         }
@@ -146,6 +155,7 @@ std::unique_ptr<Event> ThreadI::WaitForEvent(const TimerMS& timeout)
             {
                 HandleEvent(std::move(event));
                 eventHandled = true;
+                ++eventsHandled;
                 break;
             }
         }
@@ -158,10 +168,19 @@ std::unique_ptr<Event> ThreadI::WaitForEvent(const TimerMS& timeout)
         }
     }
 
-    if (eventsHandled >= MAX_EVENTS_PER_POLL)
+    bool tooManyEvents = currentQueueSize > MAX_EVENTS_PER_LOOP;
+    bool hasUnhandledEvent = eventsHandled < eventsToHandleThisLoop;
+
+    if (tooManyEvents or hasUnhandledEvent)
     {
-        Log::Warning("%s wait-for-events max events exceeded threshold:%ld n-handled-events:%ld n-received-events:ld",
-            Name(), MAX_EVENTS_PER_POLL, eventsHandled, nEventsToHandle);
+        // More to do on next loop so notify ourselves
+        m_eventQueueSmp.release();
+    }
+
+    if (tooManyEvents)
+    {
+        Log::Warning("%s wait-for-events max events exceeded threshold:%ld n-handled-events:%ld n-events-this-loop:%ld n-received-events:%ld",
+            Name(), MAX_EVENTS_PER_LOOP, eventsHandled, eventsToHandleThisLoop, currentQueueSize);
     }
     else
     {
@@ -169,23 +188,6 @@ std::unique_ptr<Event> ThreadI::WaitForEvent(const TimerMS& timeout)
     }
 
     return unhandledEvent;
-}
-
-void ThreadI::FlushEvents()
-{
-    std::scoped_lock lock{ m_eventQueueMtx };
-
-    if (not m_eventQueue.empty())
-    {
-        Log::Warning("%s flushing %ld events", Name(), m_eventQueue.size());
-    }
-
-    while (not m_eventQueue.empty())
-    {
-        m_eventQueue.pop();
-    }
-
-    Log::Info("%s flushed all events", Name());
 }
 
 void ThreadI::Enter()
@@ -203,6 +205,23 @@ void ThreadI::Enter()
 
     Log::Info("%s stopping", Name());
     Stopping();
+}
+
+void ThreadI::FlushEvents()
+{
+    std::lock_guard lock{ m_eventQueueMtx };
+
+    if (not m_eventQueue.empty())
+    {
+        Log::Warning("%s flushing %ld events", Name(), m_eventQueue.size());
+    }
+
+    while (not m_eventQueue.empty())
+    {
+        m_eventQueue.pop();
+    }
+
+    Log::Info("%s flushed all events", Name());
 }
 
 } // namespace Sage::Thread
