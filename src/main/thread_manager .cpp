@@ -62,7 +62,7 @@ void ManagerThread::WaitUntilWorkersShutdown()
                 Name(), duration.count(), TEARDOWN_THRESHOLD.count());
             break;
         }
-        Log::Info("%s workers shutdown duration:%ld", Name(), duration.count());
+        Log::Info("%s workers shutdown duration:%ld ms", Name(), duration.count());
     }
 
     Log::Info("%s workers shutdown complete", Name());
@@ -87,7 +87,7 @@ void ManagerThread::WaitUntilManagerShutdown()
                 Name(), duration.count(), TEARDOWN_THRESHOLD.count());
             break;
         }
-        Log::Info("%s manager shutdown duration:%ld", Name(), duration.count());
+        Log::Info("%s manager shutdown duration:%ld ms", Name(), duration.count());
     }
 
     Log::Info("%s manager shutdown complete", Name());

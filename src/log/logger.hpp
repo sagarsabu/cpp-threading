@@ -1,6 +1,6 @@
 #pragma once
 
-#include <functional>
+#include <functional> // for std::hash
 
 namespace Sage::Log
 {
@@ -35,6 +35,10 @@ void Error(const char* msg, ...);
 
 [[gnu::format(printf, 1, 2)]]
 void Critical(const char* msg, ...);
+
+void SetupLogger(const std::string& optionalFilename = "");
+
+void TeardownLogger();
 
 } // namespace Sage::Log
 

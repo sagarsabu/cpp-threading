@@ -7,18 +7,14 @@
 #include <iomanip>
 #include <thread>
 #include <unordered_map>
+#include <fstream>
+#include <filesystem>
+#include <atomic>
 
 #include "log/logger.hpp"
 
 namespace Sage::Log
 {
-
-// Aliases
-
-using MsgBuffer = char[1024];
-using MilliSecBuffer = char[16];
-// Max allowed buffer for POSIX thread name
-using ThreadNameBuffer = char[16];
 
 // Formatter control
 
@@ -76,14 +72,119 @@ const std::unordered_map<Level, const char*> g_levelInfo
     {Level::Critical,   "CRIT "},
 };
 
-std::mutex g_logMutex;
+std::recursive_mutex g_logMutex;
 
 Level g_currentLogLevel{ Level::Debug };
 
+struct LogStreamer;
+std::atomic<LogStreamer*> g_logStreamer{ nullptr };
+
 // Helper classes / structs
+
+struct LogStreamer
+{
+    virtual ~LogStreamer() = default;
+
+    virtual LogStreamer& operator <<(const char* log) = 0;
+    virtual LogStreamer& operator <<(const char log) = 0;
+};
+
+struct CoutLogStreamer final : public LogStreamer
+{
+    virtual ~CoutLogStreamer() = default;
+
+    CoutLogStreamer& operator<<(const char* log) override
+    {
+        std::cout << log;
+        return *this;
+    }
+
+    CoutLogStreamer& operator<<(const char log) override
+    {
+        std::cout << log;
+        return *this;
+    }
+};
+
+struct FileLogStreamer final : public LogStreamer
+{
+    FileLogStreamer(const std::string& filename) :
+        m_fileStream{ }
+    {
+        if (std::filesystem::is_regular_file(filename))
+        {
+            std::filesystem::permissions(filename, std::filesystem::perms::owner_write | std::filesystem::perms::group_read);
+            m_fileStream = std::ofstream{ filename };
+        }
+
+        if (not m_fileStream.good())
+        {
+            throw std::runtime_error("Unable to open file '" + filename + "' for writing");
+        }
+    }
+
+    virtual ~FileLogStreamer() = default;
+
+    FileLogStreamer& operator<<(const char* log) override
+    {
+        std::cout << log;
+        return *this;
+    }
+
+    FileLogStreamer& operator<<(const char log) override
+    {
+        std::cout << log;
+        return *this;
+    }
+
+private:
+    std::ofstream m_fileStream;
+};
+
+void SetupLogger(const std::string& optionalFilename)
+{
+    LogStreamer* logStreamer{ nullptr };
+    try
+    {
+        if (not optionalFilename.empty())
+        {
+            FileLogStreamer* fileStreamer = new FileLogStreamer{ optionalFilename };
+            logStreamer = fileStreamer;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "FAILED to create file streamer. what: " << e.what() << '\n';
+    }
+
+    if (logStreamer == nullptr)
+    {
+        logStreamer = new CoutLogStreamer;
+    }
+
+    if (g_logStreamer != nullptr)
+    {
+        delete g_logStreamer;
+    }
+
+    g_logStreamer = logStreamer;
+}
+
+void TeardownLogger()
+{
+    if (g_logStreamer != nullptr)
+    {
+        delete g_logStreamer;
+    }
+}
 
 struct LogTimestamp
 {
+    // e.g "01 - 09 - 2023 00:42 : 19"
+    using SecondsBuffer = char[26];
+    // :%03ld"
+    using MilliSecBuffer = char[16];
+
     LogTimestamp()
     {
         ::clock_gettime(CLOCK_REALTIME, &m_timeSpec);
@@ -96,16 +197,16 @@ struct LogTimestamp
             m_timeSpec.tv_sec++;
         }
 
+        std::strftime(m_secondsBuffer, sizeof(m_secondsBuffer), "%d-%m-%Y %H:%M:%S", std::localtime(&m_timeSpec.tv_sec));
         snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03ld", millisec);
     }
 
-    inline const time_t& getSeconds() const { return m_timeSpec.tv_sec; }
-
-    inline const time_t& getNanoSeconds() const { return m_timeSpec.tv_nsec; }
+    inline const SecondsBuffer& getSecondsBuffer() const { return m_secondsBuffer; };
 
     inline const MilliSecBuffer& getMilliSecBuffer() const { return m_msSecBuff; };
 
 private:
+    SecondsBuffer m_secondsBuffer;
     MilliSecBuffer m_msSecBuff;
     ::timespec m_timeSpec;
 };
@@ -120,6 +221,9 @@ void SetLogLevel(Level logLevel) { g_currentLogLevel = logLevel; }
 
 std::string GetThreadName()
 {
+    // Max allowed buffer for POSIX thread name
+    using ThreadNameBuffer = char[16];
+
     ThreadNameBuffer threadName;
     pthread_getname_np(pthread_self(), threadName, sizeof(threadName));
 
@@ -128,18 +232,29 @@ std::string GetThreadName()
     return oss.str();
 }
 
-void LogToStdOut(Level logLevel, const MsgBuffer& msgBuff)
+void LogToStreamer(Level logLevel, const char* msg, va_list args)
 {
+    using MsgBuffer = char[1024];
+
     static const thread_local std::string threadName{ GetThreadName() };
+
+    MsgBuffer msgBuff;
+    vsnprintf(msgBuff, sizeof(msgBuff), msg, args);
+
     LogTimestamp ts;
+    const LogTimestamp::SecondsBuffer& secondsBuffer{ ts.getSecondsBuffer() };
+    const LogTimestamp::MilliSecBuffer& milliSecBuffer{ ts.getMilliSecBuffer() };
+
+    const char* levelFmt{ getLevelFormatter(logLevel) };
+    const char* levelInfo{ getLevelInfo(logLevel) };
 
     {
-        std::scoped_lock lock{ g_logMutex };
-        std::cout
-            << getLevelFormatter(logLevel)
-            << '[' << std::put_time(std::localtime(&ts.getSeconds()), "%d-%m-%Y %H:%M:%S") << ts.getMilliSecBuffer() << "] "
-            << '[' << threadName << "] "
-            << '[' << getLevelInfo(logLevel) << "] "
+        std::lock_guard lock{ g_logMutex };
+        (*g_logStreamer)
+            << levelFmt
+            << '[' << secondsBuffer << milliSecBuffer << "] "
+            << '[' << threadName.c_str() << "] "
+            << '[' << levelInfo << "] "
             << msgBuff
             << FORMAT_END << '\n';
     }
@@ -150,13 +265,10 @@ void Debug(const char* msg, ...)
     if (Level::Debug < g_currentLogLevel)
         return;
 
-    MsgBuffer msgBuff;
     va_list args;
     va_start(args, msg);
-    vsnprintf(msgBuff, sizeof(msgBuff), msg, args);
+    LogToStreamer(Level::Debug, msg, args);
     va_end(args);
-
-    LogToStdOut(Level::Debug, msgBuff);
 }
 
 void Info(const char* msg, ...)
@@ -164,13 +276,10 @@ void Info(const char* msg, ...)
     if (Level::Info < g_currentLogLevel)
         return;
 
-    MsgBuffer msgBuff;
     va_list args;
     va_start(args, msg);
-    vsnprintf(msgBuff, sizeof(msgBuff), msg, args);
+    LogToStreamer(Level::Info, msg, args);
     va_end(args);
-
-    LogToStdOut(Level::Info, msgBuff);
 }
 
 void Warning(const char* msg, ...)
@@ -178,13 +287,10 @@ void Warning(const char* msg, ...)
     if (Level::Warning < g_currentLogLevel)
         return;
 
-    MsgBuffer msgBuff;
     va_list args;
     va_start(args, msg);
-    vsnprintf(msgBuff, sizeof(msgBuff), msg, args);
+    LogToStreamer(Level::Warning, msg, args);
     va_end(args);
-
-    LogToStdOut(Level::Warning, msgBuff);
 }
 
 void Error(const char* msg, ...)
@@ -192,13 +298,10 @@ void Error(const char* msg, ...)
     if (Level::Error < g_currentLogLevel)
         return;
 
-    MsgBuffer msgBuff;
     va_list args;
     va_start(args, msg);
-    vsnprintf(msgBuff, sizeof(msgBuff), msg, args);
+    LogToStreamer(Level::Error, msg, args);
     va_end(args);
-
-    LogToStdOut(Level::Error, msgBuff);
 }
 
 void Critical(const char* msg, ...)
@@ -206,13 +309,10 @@ void Critical(const char* msg, ...)
     if (Level::Critical < g_currentLogLevel)
         return;
 
-    MsgBuffer msgBuff;
     va_list args;
     va_start(args, msg);
-    vsnprintf(msgBuff, sizeof(msgBuff), msg, args);
+    LogToStreamer(Level::Critical, msg, args);
     va_end(args);
-
-    LogToStdOut(Level::Critical, msgBuff);
 }
 
 } // namespace Sage::Log
