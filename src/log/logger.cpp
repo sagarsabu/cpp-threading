@@ -76,48 +76,62 @@ std::recursive_mutex g_logMutex;
 
 Level g_currentLogLevel{ Level::Debug };
 
-struct LogStreamer;
+class LogStreamer;
 std::atomic<LogStreamer*> g_logStreamer{ nullptr };
 
 // Helper classes / structs
 
-struct LogStreamer
+class LogStreamer
 {
+public:
     virtual ~LogStreamer() = default;
 
-    virtual LogStreamer& operator <<(const char* log) = 0;
-    virtual LogStreamer& operator <<(const char log) = 0;
+    virtual inline LogStreamer& operator <<(const char* log) = 0;
+    virtual inline LogStreamer& operator <<(const char log) = 0;
+    virtual inline void flush() = 0;
 };
 
-struct CoutLogStreamer final : public LogStreamer
+class CoutLogStreamer final : public LogStreamer
 {
+public:
     virtual ~CoutLogStreamer() = default;
 
-    CoutLogStreamer& operator<<(const char* log) override
+    inline CoutLogStreamer& operator<<(const char* log) override
     {
         std::cout << log;
         return *this;
     }
 
-    CoutLogStreamer& operator<<(const char log) override
+    inline CoutLogStreamer& operator<<(const char log) override
     {
         std::cout << log;
         return *this;
+    }
+
+    inline void flush() override
+    {
+        std::flush(std::cout);
     }
 };
 
-struct FileLogStreamer final : public LogStreamer
+class FileLogStreamer final : public LogStreamer
 {
+public:
     FileLogStreamer(const std::string& filename) :
         m_fileStream{ }
     {
-        if (std::filesystem::is_regular_file(filename))
+        if (std::filesystem::exists(filename) and not std::filesystem::is_regular_file(filename))
         {
-            std::filesystem::permissions(filename, std::filesystem::perms::owner_write | std::filesystem::perms::group_read);
-            m_fileStream = std::ofstream{ filename };
+            throw std::runtime_error("Cannot write to non regular file '" + filename + "'");
         }
 
-        if (not m_fileStream.good())
+        m_fileStream = std::ofstream{ filename , std::ios::out | std::ios::ate | std::ios::app };
+        std::filesystem::permissions(filename,
+            std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
+            std::filesystem::perm_options::add
+        );
+
+        if (not m_fileStream.is_open())
         {
             throw std::runtime_error("Unable to open file '" + filename + "' for writing");
         }
@@ -125,38 +139,46 @@ struct FileLogStreamer final : public LogStreamer
 
     virtual ~FileLogStreamer() = default;
 
-    FileLogStreamer& operator<<(const char* log) override
+    inline FileLogStreamer& operator<<(const char* log) override
     {
-        std::cout << log;
+        m_fileStream << log;
         return *this;
     }
 
-    FileLogStreamer& operator<<(const char log) override
+    inline FileLogStreamer& operator<<(const char log) override
     {
-        std::cout << log;
+        m_fileStream << log;
         return *this;
+    }
+
+    inline void flush() override
+    {
+        std::flush(m_fileStream);
     }
 
 private:
     std::ofstream m_fileStream;
 };
 
-void SetupLogger(const std::string& optionalFilename)
+void SetupLogger(std::optional<std::string> filename)
 {
     LogStreamer* logStreamer{ nullptr };
-    try
+
+    // try setup a file logger is specified
+    if (filename.has_value())
     {
-        if (not optionalFilename.empty())
+        try
         {
-            FileLogStreamer* fileStreamer = new FileLogStreamer{ optionalFilename };
+            FileLogStreamer* fileStreamer = new FileLogStreamer{ *filename };
             logStreamer = fileStreamer;
         }
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "FAILED to create file streamer. what: " << e.what() << '\n';
+        catch (const std::exception& e)
+        {
+            std::cerr << "FAILED to create file streamer. what: " << e.what() << '\n';
+        }
     }
 
+    // Default to stdout
     if (logStreamer == nullptr)
     {
         logStreamer = new CoutLogStreamer;
@@ -175,6 +197,7 @@ void TeardownLogger()
     if (g_logStreamer != nullptr)
     {
         delete g_logStreamer;
+        g_logStreamer = nullptr;
     }
 }
 
@@ -257,6 +280,7 @@ void LogToStreamer(Level logLevel, const char* msg, va_list args)
             << '[' << levelInfo << "] "
             << msgBuff
             << FORMAT_END << '\n';
+        (*g_logStreamer).flush();
     }
 }
 

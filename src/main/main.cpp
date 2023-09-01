@@ -69,8 +69,8 @@ auto main(void) -> int
     std::signal(SIGQUIT, SignalHandler);
 
     // Setup logging
-    Log::SetupLogger("test.log");
-    Log::SetLogLevel(Log::Level::Debug);
+    Log::SetupLogger("cpp-threading.log");
+    Log::SetLogLevel(Log::Level::Info);
 
     try
     {
