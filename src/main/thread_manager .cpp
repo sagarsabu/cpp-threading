@@ -8,48 +8,44 @@
 
 using namespace std::chrono_literals;
 
-namespace Sage::Thread
+namespace Sage::Threading
 {
 
 ManagerThread::ManagerThread() :
-    ThreadI{ "MngrThread" },
+    Thread{ "MngrThread" },
     m_workers{},
     m_workersTerminated{ false },
     m_exitSignal{ 0 },
     m_shutdownSignal{ 0 }
 { }
 
-void ManagerThread::AttachWorker(ThreadI* worker)
+void ManagerThread::AttachWorker(Thread* worker)
 {
     m_workers.emplace(worker);
 }
 
 void  ManagerThread::RequestExit()
 {
-    Log::Info("%s exit requested", Name());
+    Log::Info("exit requested for '%s'", Name());
     m_exitSignal.release();
 }
 
 void ManagerThread::WaitForExit()
 {
-    Log::Info("%s waiting for exit request...",
-        Name());
+    Log::Info("wait-for-exit '%s' request...", Name());
     m_exitSignal.acquire();
-    Log::Info("%s waiting for exit triggered...",
-        Name());
+    Log::Info("wait-for-exit '%s' triggered...", Name());
 
     TransmitEvent(std::make_unique<ManagerTeardownEvent>());
 }
 
 void ManagerThread::WaitUntilWorkersShutdown()
 {
-    Log::Info("%s waiting until shutdown requested", Name());
-
+    Log::Info("wait-until-workers-shutdown '%s' requested", Name());
     m_shutdownSignal.acquire();
+    Log::Info("wait-until-workers-shutdown '%s' triggered", Name());
 
-    Log::Info("%s workers shutdown starting", Name());
     auto teardownStart = std::chrono::high_resolution_clock::now();
-
     while (WorkersRunning())
     {
         std::this_thread::sleep_for(20ms);
@@ -111,6 +107,12 @@ void ManagerThread::SendEventsToWorkers()
 
 void ManagerThread::TeardownWorkers()
 {
+    if (m_workersTerminated)
+    {
+        Log::Critical("%s workers termination has already been requested", Name());
+        return;
+    }
+
     Log::Info("%s tearing down all workers", Name());
 
     m_workersTerminated = true;
@@ -134,7 +136,7 @@ bool ManagerThread::WorkersRunning() const
     bool aWorkerIsRunning = std::any_of(
         m_workers.cbegin(),
         m_workers.cend(),
-        [](const ThreadI* worker) { return worker->IsRunning(); }
+        [](const Thread* worker) { return worker->IsRunning(); }
     );
     return aWorkerIsRunning;
 }
@@ -146,31 +148,49 @@ void ManagerThread::Stopping()
 
 int ManagerThread::Execute()
 {
-    int nFailedWorkers{ 0 };
+    int workerFailed{ 0 };
     bool exitRequested{ false };
     while (not exitRequested)
     {
-        auto event = WaitForEvent(50ms);
+        auto threadEvent = WaitForEvent(50ms);
 
         // Timeout
-        if (event == nullptr)
+        if (threadEvent == nullptr)
         {
             SendEventsToWorkers();
             continue;
         }
 
-        switch (event->Type())
+        switch (threadEvent->Receiver())
         {
-            case EventT::Exit:
+            case EventReceiverT::Default:
             {
-                Log::Info("%s received exit event", Name());
-                exitRequested = true;
+                auto& event = static_cast<DefaultEvent&>(*threadEvent);
+                switch (event.Type())
+                {
+                    case DefaultEventT::Exit:
+                    {
+                        Log::Info("%s received exit event", Name());
+                        exitRequested = true;
+                        break;
+                    }
+
+                    default:
+                    {
+                        Log::Error("%s execute got event from unkown event %d from default receiver",
+                            Name(), static_cast<int>(event.Type()));
+                        break;
+                    }
+                }
+
                 break;
             }
 
+
             default:
             {
-                Log::Error("%s execute got unkown event:%d", Name(), event->Type());
+                Log::Error("%s execute got event for unexpected receiver:%s",
+                    Name(), threadEvent->ReceiverName());
                 break;
             }
         }
@@ -178,15 +198,23 @@ int ManagerThread::Execute()
 
     for (auto worker : m_workers)
     {
-        nFailedWorkers += (worker->ExitCode() != 0);
+        workerFailed |= (worker->ExitCode() != 0);
     }
 
-    return nFailedWorkers;
+    return workerFailed;
 }
 
-void ManagerThread::HandleEvent(ThreadEvent event)
+void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
-    switch (event->Type())
+    if (threadEvent->Receiver() != EventReceiverT::ThreadManager)
+    {
+        Log::Error("%s handle-event got event for expected receiver:%s",
+            Name(), threadEvent->ReceiverName());
+        return;
+    }
+
+    auto& event = static_cast<ManagerEvent&>(*threadEvent);
+    switch (event.Type())
     {
         case ManagerEventT::TeardownWorkers:
         {
@@ -197,10 +225,11 @@ void ManagerThread::HandleEvent(ThreadEvent event)
 
         default:
         {
-            Log::Error("%s handle-event got unkown event:%d", Name(), event->Type());
+            Log::Error("%s handle-event got unkown event:%d",
+                Name(), static_cast<int>(event.Type()));
             break;
         }
     }
 }
 
-} // namespace Sage::Thread
+} // namespace Sage::Threading

@@ -4,7 +4,7 @@
 
 #include "log/logger.hpp"
 
-namespace Sage::Thread
+namespace Sage::Threading
 {
 
 struct ScopeTimer final
@@ -26,4 +26,4 @@ private:
     const std::string m_tag;
 };
 
-} // namespace Sage::Thread
+} // namespace Sage::Threading

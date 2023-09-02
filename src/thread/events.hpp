@@ -1,34 +1,80 @@
 #pragma once
 
-namespace Sage::Thread
+#include <unordered_map>
+
+namespace Sage::Threading
 {
 
-enum EventT
+// Event dispatching
+
+enum class EventReceiverT
 {
-    Exit = 0,
-    ManagerStart = 1000
+    Default,
+    ThreadManager,
+    ThreadWorker
 };
 
-struct Event
+struct ThreadEvent
 {
-    virtual ~Event() = default;
+    virtual ~ThreadEvent() = default;
 
-    int Type() const { return m_evenType; }
+    EventReceiverT Receiver() const { return m_receiver; }
+
+    const char* ReceiverName() const
+    {
+        static const std::unordered_map<EventReceiverT, const char*> receiverNameMap
+        {
+            {EventReceiverT::Default,          "Default"},
+            {EventReceiverT::ThreadManager,    "ThreadManager"},
+            {EventReceiverT::ThreadWorker,     "ThreadWorker"},
+        };
+
+        auto itr = receiverNameMap.find(m_receiver);
+        if (itr != receiverNameMap.end())
+        {
+            return itr->second;
+        }
+
+        return "Unknown";
+    };
 
 protected:
-    explicit Event(int evenType) : m_evenType{ evenType } { }
+    explicit ThreadEvent(EventReceiverT receiver) : m_receiver{ receiver } { }
 
 private:
-    const int m_evenType;
+    const EventReceiverT m_receiver;
 };
 
-struct ExitEvent final : public Event
+// Events for the default receiver
+
+enum class DefaultEventT
+{
+    Exit
+};
+
+struct DefaultEvent : public ThreadEvent
+{
+    virtual ~DefaultEvent() = default;
+
+    DefaultEventT Type() const { return m_event; }
+
+protected:
+    explicit DefaultEvent(DefaultEventT eventType) :
+        ThreadEvent{ EventReceiverT::Default },
+        m_event{ eventType }
+    { }
+
+private:
+    const DefaultEventT m_event;
+};
+
+struct ExitEvent final : public DefaultEvent
 {
     ExitEvent() :
-        Event{ EventT::Exit }
+        DefaultEvent{ DefaultEventT::Exit }
     { }
 };
 
 
-} // namespace Sage::Thread
+} // namespace Sage::Threading
 

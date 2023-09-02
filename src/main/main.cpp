@@ -11,28 +11,34 @@
 
 using namespace std::chrono_literals;
 using namespace Sage;
-using namespace Sage::Thread;
+using namespace Sage::Threading;
 
-namespace Sage::Thread
+namespace Sage::Threading
 {
 
 std::atomic<ManagerThread*> g_managerThread{ nullptr };
 
-class WorkerThread final : public ThreadI
+class WorkerThread final : public Thread
 {
 public:
     WorkerThread() :
-        ThreadI{ std::string("WkrThread-") + std::to_string(++s_id) }
+        Thread{ std::string("WkrThread-") + std::to_string(++s_id) }
     { }
 
 private:
-    void HandleEvent(std::unique_ptr<Event> event) override
+    void HandleEvent(UniqueThreadEvent threadEvent) override
     {
-        switch (event->Type())
+        if (threadEvent->Receiver() != EventReceiverT::ThreadManager)
+        {
+            return;
+        }
+
+        auto& event = static_cast<ManagerEvent&>(*threadEvent);
+        switch (event.Type())
         {
             case ManagerEventT::Test:
             {
-                auto& rxEvent = static_cast<ManagerTestEvent&>(*event);
+                auto& rxEvent = static_cast<ManagerTestEvent&>(event);
                 Log::Info("%s handle-event 'Test'. sleeping for %ld ms",
                     Name(), rxEvent.m_timeout.count());
                 std::this_thread::sleep_for(rxEvent.m_timeout);
@@ -40,7 +46,8 @@ private:
             }
 
             default:
-                Log::Error("%s handle-event unknown event:%d", Name(), event->Type());
+                Log::Error("%s handle-event unknown event:%d",
+                    Name(), static_cast<int>(event.Type()));
                 break;
         }
     }
@@ -49,7 +56,7 @@ private:
     static inline std::atomic<uint> s_id{ 0 };
 };
 
-} // namespace Sage::Thread
+} // namespace Sage::Threading
 
 void SignalHandler(int signal)
 {
@@ -69,8 +76,8 @@ auto main(void) -> int
     std::signal(SIGQUIT, SignalHandler);
 
     // Setup logging
-    Log::SetupLogger("cpp-threading.log");
-    Log::SetLogLevel(Log::Level::Info);
+    Log::SetupLogger();
+    Log::SetLogLevel(Log::Level::Debug);
 
     try
     {

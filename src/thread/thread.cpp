@@ -11,58 +11,64 @@
 
 using namespace std::chrono_literals;
 
-namespace Sage::Thread
+namespace Sage::Threading
 {
 
-ThreadI::ThreadI(const std::string& threadName) :
+Thread::Thread(const std::string& threadName) :
     m_threadName{ threadName },
-    m_threadCreationMtx{},
     m_thread{},
     m_eventQueueMtx{},
     m_eventQueue{},
     m_eventSignal{ 0 },
+    m_started{ false },
     m_running{ false },
+    m_stoped{ false },
     m_exitCode{ 0 }
 {
     Log::Debug("%s c'tor", Name());
 }
 
-ThreadI::~ThreadI()
+Thread::~Thread()
 {
     Log::Debug("%s d'tor", Name());
 
     if (m_thread.joinable())
     {
+        // NOTE: Not sure if this is a great idea as it could cause exit to hang...
         Log::Debug("%s joining...", Name());
         m_thread.join();
     }
 }
 
-void ThreadI::Start()
+void Thread::Start()
 {
     Log::Info("%s start requested", Name());
 
+    if (m_started)
     {
-        std::lock_guard lock{ m_threadCreationMtx };
-        if (m_running)
-        {
-            Log::Critical("%s started when already running", Name());
-            return;
-        }
-
-        m_thread = std::thread(&ThreadI::Enter, this);
+        Log::Critical("%s start requested when already starting", Name());
+        return;
     }
+
+    m_started = true;
+    m_thread = std::thread(&Thread::Enter, this);
 }
 
-void ThreadI::Stop()
+void Thread::Stop()
 {
     Log::Info("%s stop requested", Name());
+    if (m_stoped)
+    {
+        Log::Critical("%s stop requested when already stopping", Name());
+        return;
+    }
 
+    m_stoped = true;
     FlushEvents();
     TransmitEvent(std::make_unique<ExitEvent>());
 }
 
-void ThreadI::TransmitEvent(ThreadEvent event)
+void Thread::TransmitEvent(UniqueThreadEvent event)
 {
     if (m_running)
     {
@@ -72,35 +78,53 @@ void ThreadI::TransmitEvent(ThreadEvent event)
     }
     else
     {
-        Log::Critical("%s transmit-event dropped event:%d", Name(), event->Type());
+        Log::Critical("%s transmit-event dropped event for receiver:%s",
+            Name(), event->ReceiverName());
     }
 }
 
-int ThreadI::Execute()
+int Thread::Execute()
 {
     bool exitRequested{ false };
     while (not exitRequested)
     {
-        ThreadEvent event = WaitForEvent();
+        UniqueThreadEvent threadEvent = WaitForEvent();
         // Timeout
-        if (event == nullptr)
+        if (threadEvent == nullptr)
         {
             continue;
         }
 
-        switch (event->Type())
+        switch (threadEvent->Receiver())
         {
-            case EventT::Exit:
+            case EventReceiverT::Default:
             {
-                Log::Info("%s received exit event", Name());
-                exitRequested = true;
+                auto& event = static_cast<DefaultEvent&>(*threadEvent);
+                switch (event.Type())
+                {
+                    case DefaultEventT::Exit:
+                    {
+                        Log::Info("%s received exit event", Name());
+                        exitRequested = true;
+                        break;
+                    }
+
+                    default:
+                    {
+                        Log::Error("%s default execute got event from unkown event %d from default receiver",
+                            Name(), static_cast<int>(event.Type()));
+                        break;
+                    }
+                }
+
                 break;
             }
 
 
             default:
             {
-                Log::Error("%s default execute got unkown event:%d", Name(), event->Type());
+                Log::Error("%s default execute got event from unkown receiver:%s",
+                    Name(), threadEvent->ReceiverName());
                 break;
             }
         }
@@ -109,7 +133,7 @@ int ThreadI::Execute()
     return 0;
 }
 
-ThreadEvent ThreadI::WaitForEvent(const TimeMS& timeout)
+UniqueThreadEvent Thread::WaitForEvent(const TimeMS& timeout)
 {
     ScopeTimer timer{ m_threadName + "@WaitForEvent" };
     bool hasEvent = m_eventSignal.try_acquire_for(timeout);
@@ -125,29 +149,29 @@ ThreadEvent ThreadI::WaitForEvent(const TimeMS& timeout)
         currentQueueSize = m_eventQueue.size();
     }
 
-    ThreadEvent unhandledEvent{ nullptr };
+    UniqueThreadEvent unhandledThreadEvent{ nullptr };
     // Don't hold other threads from pushing events to this thread
     size_t eventsToHandleThisLoop{ std::min(currentQueueSize, MAX_EVENTS_PER_LOOP) };
     size_t eventsHandled{ 0 };
     while (eventsHandled < eventsToHandleThisLoop)
     {
-        ThreadEvent event{ nullptr };
+        UniqueThreadEvent threadEvent{ nullptr };
         {
             std::lock_guard lock{ m_eventQueueMtx };
-            event = std::move(m_eventQueue.front());
+            threadEvent = std::move(m_eventQueue.front());
             m_eventQueue.pop();
         }
 
         bool eventHandled{ false };
-        switch (event->Type())
+        switch (threadEvent->Receiver())
         {
-            case EventT::Exit:
+            case EventReceiverT::Default:
                 break;
 
             default:
             {
-                ScopeTimer handleTimer{ m_threadName + "@WaitForEvent::HandleTimer::" + std::to_string(event->Type()) };
-                HandleEvent(std::move(event));
+                ScopeTimer handleTimer{ m_threadName + "@WaitForEvent::HandleTimer::" + threadEvent->ReceiverName() };
+                HandleEvent(std::move(threadEvent));
                 eventHandled = true;
                 ++eventsHandled;
                 break;
@@ -157,7 +181,7 @@ ThreadEvent ThreadI::WaitForEvent(const TimeMS& timeout)
         if (not eventHandled)
         {
             // Push event upwards
-            unhandledEvent = std::move(event);
+            unhandledThreadEvent = std::move(threadEvent);
             break;
         }
     }
@@ -181,15 +205,16 @@ ThreadEvent ThreadI::WaitForEvent(const TimeMS& timeout)
         Log::Debug("%s wait-for-events n-received-events:%ld", Name(), eventsHandled);
     }
 
-    return unhandledEvent;
+    return unhandledThreadEvent;
 }
 
-void ThreadI::HandleEvent(ThreadEvent event)
+void Thread::HandleEvent(UniqueThreadEvent event)
 {
-    Log::Warning("%s default handle-event discarding event:%d", Name(), event->Type());
+    Log::Warning("%s default handle-event discarding event for receiver:%s",
+        Name(), event->ReceiverName());
 }
 
-void ThreadI::Enter()
+void Thread::Enter()
 {
     pthread_t self = pthread_self();
     pthread_setname_np(self, Name());
@@ -206,7 +231,7 @@ void ThreadI::Enter()
     Stopping();
 }
 
-void ThreadI::FlushEvents()
+void Thread::FlushEvents()
 {
     std::lock_guard lock{ m_eventQueueMtx };
 
@@ -223,4 +248,4 @@ void ThreadI::FlushEvents()
     Log::Info("%s flushed all events", Name());
 }
 
-} // namespace Sage::Thread
+} // namespace Sage::Threading

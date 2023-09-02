@@ -7,34 +7,51 @@
 
 #include "thread/thread.hpp"
 
-namespace Sage::Thread
+namespace Sage::Threading
 {
 
-enum ManagerEventT
+enum class ManagerEventT
 {
-    Test = EventT::ManagerStart + 1,
+    Test,
     TeardownWorkers
 };
 
-struct ManagerTestEvent final : public Event
+
+struct ManagerEvent : public ThreadEvent
 {
-    explicit ManagerTestEvent(const Thread::TimeMS& timeout) :
-        Event{ ManagerEventT::Test },
+    virtual ~ManagerEvent() = default;
+
+    ManagerEventT Type() const { return m_event; }
+
+protected:
+    explicit ManagerEvent(ManagerEventT eventType) :
+        ThreadEvent{ EventReceiverT::ThreadManager },
+        m_event{ eventType }
+    { }
+
+private:
+    const ManagerEventT m_event;
+};
+
+struct ManagerTestEvent final : public ManagerEvent
+{
+    explicit ManagerTestEvent(const TimeMS& timeout) :
+        ManagerEvent{ ManagerEventT::Test },
         m_timeout{ timeout }
     { }
 
-    Thread::TimeMS m_timeout;
+    TimeMS m_timeout;
 };
 
-struct ManagerTeardownEvent final : public Event
+struct ManagerTeardownEvent final : public ManagerEvent
 {
     ManagerTeardownEvent() :
-        Event{ ManagerEventT::TeardownWorkers }
+        ManagerEvent{ ManagerEventT::TeardownWorkers }
     { }
 };
 
 
-class ManagerThread final : public ThreadI
+class ManagerThread final : public Thread
 {
 public:
     static const inline TimeMS TEARDOWN_THRESHOLD{ 1000 };
@@ -43,7 +60,7 @@ public:
 public:
     ManagerThread();
 
-    void AttachWorker(ThreadI* worker);
+    void AttachWorker(Thread* worker);
 
     void RequestExit();
 
@@ -66,13 +83,13 @@ private:
 
     int Execute() override;
 
-    void HandleEvent(ThreadEvent event) override;
+    void HandleEvent(UniqueThreadEvent event) override;
 
 private:
-    std::set<ThreadI*> m_workers;
+    std::set<Thread*> m_workers;
     std::atomic<bool> m_workersTerminated;
     std::binary_semaphore m_exitSignal;
     std::binary_semaphore m_shutdownSignal;
 };
 
-} // namespace Sage::Thread
+} // namespace Sage::Threading

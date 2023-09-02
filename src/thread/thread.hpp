@@ -9,24 +9,24 @@
 #include <chrono>
 #include <atomic>
 
-namespace Sage::Thread
+namespace Sage::Threading
 {
 
 // Forward declaration
 
-class Event;
+struct ThreadEvent;
 
 // Aliases
 
 using TimeMS = std::chrono::milliseconds;
-using ThreadEvent = std::unique_ptr<Event>;
+using UniqueThreadEvent = std::unique_ptr<ThreadEvent>;
 
-class ThreadI
+class Thread
 {
 public:
-    explicit ThreadI(const std::string& threadName);
+    explicit Thread(const std::string& threadName);
 
-    virtual ~ThreadI();
+    virtual ~Thread();
 
     const char* Name() const { return m_threadName.c_str(); }
 
@@ -34,7 +34,7 @@ public:
 
     void Stop();
 
-    void TransmitEvent(ThreadEvent event);
+    void TransmitEvent(UniqueThreadEvent event);
 
     int ExitCode() const { return m_exitCode; }
 
@@ -48,9 +48,9 @@ protected:
 
     virtual void Stopping() { }
 
-    ThreadEvent WaitForEvent(const TimeMS& timeout = TimeMS{ 1000 });
+    UniqueThreadEvent WaitForEvent(const TimeMS& timeout = TimeMS{ 1000 });
 
-    virtual void HandleEvent(ThreadEvent event);
+    virtual void HandleEvent(UniqueThreadEvent event);
 
 private:
     // thread entry point
@@ -60,16 +60,17 @@ private:
 
 private:
     const std::string m_threadName;
-    std::mutex m_threadCreationMtx;
     std::thread m_thread;
     std::mutex m_eventQueueMtx;
-    std::queue<ThreadEvent> m_eventQueue;
+    std::queue<UniqueThreadEvent> m_eventQueue;
     std::binary_semaphore m_eventSignal;
+    std::atomic<bool> m_started;
     std::atomic<bool> m_running;
+    std::atomic<bool> m_stoped;
     std::atomic<int> m_exitCode;
 
 private:
     static constexpr size_t MAX_EVENTS_PER_LOOP{ 10 };
 };
 
-} // namespace Sage::Thread
+} // namespace Sage::Threading
