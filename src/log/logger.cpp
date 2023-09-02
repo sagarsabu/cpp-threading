@@ -174,7 +174,7 @@ void SetupLogger(std::optional<std::string> filename)
         }
         catch (const std::exception& e)
         {
-            std::cerr << "FAILED to create file streamer. what: " << e.what() << '\n';
+            std::cerr << "FAILED to create file streamer. what: " << e.what() << std::endl;
         }
     }
 
@@ -205,23 +205,23 @@ struct LogTimestamp
 {
     // e.g "01 - 09 - 2023 00:42 : 19"
     using SecondsBuffer = char[26];
-    // :%03ld"
-    using MilliSecBuffer = char[16];
+    // :%03u requires 7 bytes max
+    using MilliSecBuffer = char[7];
 
     LogTimestamp()
     {
         ::clock_gettime(CLOCK_REALTIME, &m_timeSpec);
 
-        long millisec = m_timeSpec.tv_nsec / 1000000;
+        uint16_t millisec = static_cast<uint16_t>(m_timeSpec.tv_nsec / 1'000'000U);
         // incase of overflow
-        if (millisec >= 1000)
+        if (millisec >= 1000U)
         {
-            millisec -= 1000;
+            millisec = static_cast<uint16_t>(millisec - 1000U);
             m_timeSpec.tv_sec++;
         }
 
         std::strftime(m_secondsBuffer, sizeof(m_secondsBuffer), "%d-%m-%Y %H:%M:%S", std::localtime(&m_timeSpec.tv_sec));
-        snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03ld", millisec);
+        snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03u", millisec);
     }
 
     inline const SecondsBuffer& getSecondsBuffer() const { return m_secondsBuffer; };
