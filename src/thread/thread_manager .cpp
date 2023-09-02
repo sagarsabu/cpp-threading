@@ -3,8 +3,8 @@
 #include <algorithm>
 
 #include "thread/events.hpp"
+#include "thread/thread_manager.hpp"
 #include "log/logger.hpp"
-#include "main/thread_manager.hpp"
 
 using namespace std::chrono_literals;
 

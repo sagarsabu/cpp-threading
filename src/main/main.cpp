@@ -7,7 +7,7 @@
 #include "log/logger.hpp"
 #include "thread/thread.hpp"
 #include "thread/events.hpp"
-#include "main/thread_manager.hpp"
+#include "thread/thread_manager.hpp"
 
 using namespace std::chrono_literals;
 using namespace Sage;
@@ -85,7 +85,7 @@ auto main(void) -> int
         g_managerThread = &manager;
         manager.Start();
 
-        std::array<WorkerThread, 4> workers;
+        std::array<WorkerThread, 1> workers;
         for (auto& worker : workers)
         {
             worker.Start();
