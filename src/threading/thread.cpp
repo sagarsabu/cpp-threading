@@ -5,9 +5,9 @@
 #include <cassert>
 
 #include "log/logger.hpp"
-#include "thread/thread.hpp"
-#include "thread/events.hpp"
-#include "thread/timer.hpp"
+#include "threading/thread.hpp"
+#include "threading/events.hpp"
+#include "threading/scoped_timer.hpp"
 
 using namespace std::chrono_literals;
 
@@ -97,12 +97,12 @@ int Thread::Execute()
 
         switch (threadEvent->Receiver())
         {
-            case EventReceiverT::Default:
+            case EventReceiver::Self:
             {
-                auto& event = static_cast<DefaultEvent&>(*threadEvent);
+                auto& event = static_cast<SelfEvent&>(*threadEvent);
                 switch (event.Type())
                 {
-                    case DefaultEventT::Exit:
+                    case SelfEvent::Exit:
                     {
                         Log::Info("%s received exit event", Name());
                         exitRequested = true;
@@ -111,7 +111,7 @@ int Thread::Execute()
 
                     default:
                     {
-                        Log::Error("%s default execute got event from unkown event %d from default receiver",
+                        Log::Error("%s default execute got event from unkown event %d from self receiver",
                             Name(), static_cast<int>(event.Type()));
                         break;
                     }
@@ -135,7 +135,7 @@ int Thread::Execute()
 
 UniqueThreadEvent Thread::WaitForEvent(const TimeMS& timeout)
 {
-    ScopeTimer timer{ m_threadName + "@WaitForEvent" };
+    ScopedTimer timer{ m_threadName + "@WaitForEvent" };
     bool hasEvent = m_eventSignal.try_acquire_for(timeout);
     if (not hasEvent)
     {
@@ -165,12 +165,12 @@ UniqueThreadEvent Thread::WaitForEvent(const TimeMS& timeout)
         bool eventHandled{ false };
         switch (threadEvent->Receiver())
         {
-            case EventReceiverT::Default:
+            case EventReceiver::Self:
                 break;
 
             default:
             {
-                ScopeTimer handleTimer{ m_threadName + "@WaitForEvent::HandleTimer::" + threadEvent->ReceiverName() };
+                ScopedTimer handleTimer{ m_threadName + "@WaitForEvent::HandleTimer::" };
                 HandleEvent(std::move(threadEvent));
                 eventHandled = true;
                 ++eventsHandled;

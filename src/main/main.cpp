@@ -1,62 +1,14 @@
-#include <string>
-#include <chrono>
 #include <atomic>
 #include <csignal>
-#include <memory>
 
 #include "log/logger.hpp"
-#include "thread/thread.hpp"
-#include "thread/events.hpp"
-#include "thread/thread_manager.hpp"
+#include "threading/manager_thread.hpp"
+#include "threading/worker_thread.hpp"
 
-using namespace std::chrono_literals;
 using namespace Sage;
 using namespace Sage::Threading;
 
-namespace Sage::Threading
-{
-
-std::atomic<ManagerThread*> g_managerThread{ nullptr };
-
-class WorkerThread final : public Thread
-{
-public:
-    WorkerThread() :
-        Thread{ std::string("WkrThread-") + std::to_string(++s_id) }
-    { }
-
-private:
-    void HandleEvent(UniqueThreadEvent threadEvent) override
-    {
-        if (threadEvent->Receiver() != EventReceiverT::ThreadManager)
-        {
-            return;
-        }
-
-        auto& event = static_cast<ManagerEvent&>(*threadEvent);
-        switch (event.Type())
-        {
-            case ManagerEventT::Test:
-            {
-                auto& rxEvent = static_cast<ManagerTestEvent&>(event);
-                Log::Info("%s handle-event 'Test'. sleeping for %ld ms",
-                    Name(), rxEvent.m_timeout.count());
-                std::this_thread::sleep_for(rxEvent.m_timeout);
-                break;
-            }
-
-            default:
-                Log::Error("%s handle-event unknown event:%d",
-                    Name(), static_cast<int>(event.Type()));
-                break;
-        }
-    }
-
-private:
-    static inline std::atomic<uint> s_id{ 0 };
-};
-
-} // namespace Sage::Threading
+std::atomic<Sage::Threading::ManagerThread*> g_managerThread{ nullptr };
 
 void SignalHandler(int signal)
 {
@@ -85,7 +37,7 @@ auto main(void) -> int
         g_managerThread = &manager;
         manager.Start();
 
-        std::array<WorkerThread, 1> workers;
+        std::array<WorkerThread, 4> workers;
         for (auto& worker : workers)
         {
             worker.Start();

@@ -7,14 +7,14 @@
 namespace Sage::Threading
 {
 
-struct ScopeTimer final
+struct ScopedTimer final
 {
-    explicit ScopeTimer(const std::string& tag) :
+    explicit ScopedTimer(const std::string& tag) :
         m_start{ std::chrono::high_resolution_clock::now() },
         m_tag{ tag }
     { }
 
-    ~ScopeTimer()
+    ~ScopedTimer()
     {
         auto now = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_start);

@@ -5,51 +5,45 @@
 #include <atomic>
 #include <semaphore>
 
-#include "thread/thread.hpp"
+#include "threading/thread.hpp"
+#include "threading/events.hpp"
 
 namespace Sage::Threading
 {
 
-enum class ManagerEventT
-{
-    Test,
-    TeardownWorkers
-};
+// Manager events
 
-
-struct ManagerEvent : public ThreadEvent
+class ManagerEvent : public ThreadEvent
 {
+public:
+    enum Event
+    {
+        TeardownWorkers
+    };
+
     virtual ~ManagerEvent() = default;
 
-    ManagerEventT Type() const { return m_event; }
+    Event Type() const { return m_event; }
 
 protected:
-    explicit ManagerEvent(ManagerEventT eventType) :
-        ThreadEvent{ EventReceiverT::ThreadManager },
+    explicit ManagerEvent(Event eventType) :
+        ThreadEvent{ EventReceiver::ManagerThread },
         m_event{ eventType }
     { }
 
 private:
-    const ManagerEventT m_event;
+    const Event m_event;
 };
 
-struct ManagerTestEvent final : public ManagerEvent
+class ManagerTeardownEvent final : public ManagerEvent
 {
-    explicit ManagerTestEvent(const TimeMS& timeout) :
-        ManagerEvent{ ManagerEventT::Test },
-        m_timeout{ timeout }
-    { }
-
-    TimeMS m_timeout;
-};
-
-struct ManagerTeardownEvent final : public ManagerEvent
-{
+public:
     ManagerTeardownEvent() :
-        ManagerEvent{ ManagerEventT::TeardownWorkers }
+        ManagerEvent{ Event::TeardownWorkers }
     { }
 };
 
+// Manager thread
 
 class ManagerThread final : public Thread
 {

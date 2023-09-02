@@ -14,7 +14,7 @@ namespace Sage::Threading
 
 // Forward declaration
 
-struct ThreadEvent;
+class ThreadEvent;
 
 // Aliases
 

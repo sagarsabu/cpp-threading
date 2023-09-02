@@ -2,9 +2,10 @@
 #include <memory>
 #include <algorithm>
 
-#include "thread/events.hpp"
-#include "thread/thread_manager.hpp"
 #include "log/logger.hpp"
+#include "threading/events.hpp"
+#include "threading/manager_thread.hpp"
+#include "threading/worker_thread.hpp"
 
 using namespace std::chrono_literals;
 
@@ -100,7 +101,7 @@ void ManagerThread::SendEventsToWorkers()
     for (auto worker : m_workers)
     {
         Log::Debug("%s sending work to %s", Name(), worker->Name());
-        worker->TransmitEvent(std::make_unique<ManagerTestEvent>(TEST_TIMEOUT));
+        worker->TransmitEvent(std::make_unique<WorkerTestEvent>(TEST_TIMEOUT));
         Log::Debug("%s completed sending work to %s", Name(), worker->Name());
     }
 }
@@ -163,12 +164,12 @@ int ManagerThread::Execute()
 
         switch (threadEvent->Receiver())
         {
-            case EventReceiverT::Default:
+            case EventReceiver::Self:
             {
-                auto& event = static_cast<DefaultEvent&>(*threadEvent);
+                auto& event = static_cast<SelfEvent&>(*threadEvent);
                 switch (event.Type())
                 {
-                    case DefaultEventT::Exit:
+                    case SelfEvent::Exit:
                     {
                         Log::Info("%s received exit event", Name());
                         exitRequested = true;
@@ -177,7 +178,7 @@ int ManagerThread::Execute()
 
                     default:
                     {
-                        Log::Error("%s execute got event from unkown event %d from default receiver",
+                        Log::Error("%s execute got event from unkown event %d from self receiver",
                             Name(), static_cast<int>(event.Type()));
                         break;
                     }
@@ -206,7 +207,7 @@ int ManagerThread::Execute()
 
 void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
-    if (threadEvent->Receiver() != EventReceiverT::ThreadManager)
+    if (threadEvent->Receiver() != EventReceiver::ManagerThread)
     {
         Log::Error("%s handle-event got event for expected receiver:%s",
             Name(), threadEvent->ReceiverName());
@@ -216,7 +217,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
     auto& event = static_cast<ManagerEvent&>(*threadEvent);
     switch (event.Type())
     {
-        case ManagerEventT::TeardownWorkers:
+        case ManagerEvent::TeardownWorkers:
         {
             TeardownWorkers();
             RequestShutdown();

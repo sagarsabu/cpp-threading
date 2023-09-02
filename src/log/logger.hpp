@@ -2,6 +2,7 @@
 
 #include <functional> // for std::hash
 #include <optional>
+#include <string>
 
 namespace Sage::Log
 {
