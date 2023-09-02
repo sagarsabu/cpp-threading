@@ -170,7 +170,7 @@ UniqueThreadEvent Thread::WaitForEvent(const TimeMS& timeout)
 
             default:
             {
-                ScopedTimer handleTimer{ m_threadName + "@WaitForEvent::HandleTimer::" };
+                ScopedTimer handleTimer{ m_threadName + "@WaitForEvent::HandleTimer" };
                 HandleEvent(std::move(threadEvent));
                 eventHandled = true;
                 ++eventsHandled;
