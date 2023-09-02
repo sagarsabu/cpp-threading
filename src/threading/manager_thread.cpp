@@ -7,8 +7,6 @@
 #include "threading/manager_thread.hpp"
 #include "threading/worker_thread.hpp"
 
-using namespace std::chrono_literals;
-
 namespace Sage::Threading
 {
 
@@ -51,7 +49,7 @@ void ManagerThread::WaitUntilWorkersShutdown()
     {
         std::this_thread::sleep_for(20ms);
         auto now = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<TimeMS>(now - teardownStart);
+        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - teardownStart);
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
@@ -76,7 +74,7 @@ void ManagerThread::WaitUntilManagerShutdown()
     {
         std::this_thread::sleep_for(20ms);
         auto now = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<TimeMS>(now - teardownStart);
+        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - teardownStart);
 
         if (duration >= TEARDOWN_THRESHOLD)
         {

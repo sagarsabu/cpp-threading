@@ -10,22 +10,23 @@ using namespace Sage::Threading;
 
 std::atomic<Sage::Threading::ManagerThread*> g_managerThread{ nullptr };
 
-void SignalHandler(int signal)
-{
-    Log::Info("SignalHandler received signal:%d", signal);
-    if (g_managerThread != nullptr)
-    {
-        (*g_managerThread).RequestExit();
-    }
-}
-
-auto main(void) -> int
+int main(int, const char**)
 {
     int res{ 0 };
 
+    auto signalHandler = [](int signal) -> void
+    {
+        Log::Info("SignalHandler received signal:%d", signal);
+        if (g_managerThread != nullptr)
+        {
+            (*g_managerThread).RequestExit();
+        }
+    };
+
     // Attach signals
-    std::signal(SIGINT, SignalHandler);
-    std::signal(SIGQUIT, SignalHandler);
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGQUIT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
 
     // Setup logging
     Log::SetupLogger();

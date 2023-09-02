@@ -33,12 +33,12 @@ private:
 class WorkerTestEvent final : public WorkerEvent
 {
 public:
-    explicit WorkerTestEvent(const TimeMS& timeout) :
+    explicit WorkerTestEvent(const TimeMilliSec& timeout) :
         WorkerEvent{ Event::Test },
         m_timeout{ timeout }
     { }
 
-    TimeMS m_timeout;
+    TimeMilliSec m_timeout;
 };
 
 // Worker thread

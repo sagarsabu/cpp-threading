@@ -3,6 +3,7 @@
 #include <chrono>
 
 #include "log/logger.hpp"
+#include "threading/timer.hpp"
 
 namespace Sage::Threading
 {
@@ -10,19 +11,19 @@ namespace Sage::Threading
 struct ScopedTimer final
 {
     explicit ScopedTimer(const std::string& tag) :
-        m_start{ std::chrono::high_resolution_clock::now() },
+        m_start{ Clock::now() },
         m_tag{ tag }
     { }
 
     ~ScopedTimer()
     {
-        auto now = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_start);
+        auto now = Clock::now();
+        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - m_start);
         Log::Debug("ScopedTimer '%s' took:%ld ms", m_tag.c_str(), duration.count());
     }
 
 private:
-    const std::chrono::high_resolution_clock::time_point m_start;
+    const Clock::time_point m_start;
     const std::string m_tag;
 };
 

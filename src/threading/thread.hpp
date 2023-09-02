@@ -9,6 +9,8 @@
 #include <chrono>
 #include <atomic>
 
+#include "threading/timer.hpp"
+
 namespace Sage::Threading
 {
 
@@ -18,7 +20,6 @@ class ThreadEvent;
 
 // Aliases
 
-using TimeMS = std::chrono::milliseconds;
 using UniqueThreadEvent = std::unique_ptr<ThreadEvent>;
 
 class Thread
@@ -48,7 +49,7 @@ protected:
 
     virtual void Stopping() { }
 
-    UniqueThreadEvent WaitForEvent(const TimeMS& timeout = TimeMS{ 1000 });
+    UniqueThreadEvent WaitForEvent(const TimeMilliSec& timeout =  1000ms );
 
     virtual void HandleEvent(UniqueThreadEvent event);
 

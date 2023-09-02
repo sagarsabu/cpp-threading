@@ -9,8 +9,6 @@
 #include "threading/events.hpp"
 #include "threading/scoped_timer.hpp"
 
-using namespace std::chrono_literals;
-
 namespace Sage::Threading
 {
 
@@ -133,7 +131,7 @@ int Thread::Execute()
     return 0;
 }
 
-UniqueThreadEvent Thread::WaitForEvent(const TimeMS& timeout)
+UniqueThreadEvent Thread::WaitForEvent(const TimeMilliSec& timeout)
 {
     ScopedTimer timer{ m_threadName + "@WaitForEvent" };
     bool hasEvent = m_eventSignal.try_acquire_for(timeout);

@@ -5,6 +5,7 @@
 #include <atomic>
 #include <semaphore>
 
+#include "threading/timer.hpp"
 #include "threading/thread.hpp"
 #include "threading/events.hpp"
 
@@ -48,8 +49,8 @@ public:
 class ManagerThread final : public Thread
 {
 public:
-    static const inline TimeMS TEARDOWN_THRESHOLD{ 1000 };
-    static const inline TimeMS TEST_TIMEOUT{ 20 };
+    static const inline TimeMilliSec TEARDOWN_THRESHOLD{ 1000ms };
+    static const inline TimeMilliSec TEST_TIMEOUT{ 20ms };
 
 public:
     ManagerThread();
