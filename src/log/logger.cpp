@@ -13,8 +13,13 @@
 
 #include "log/logger.hpp"
 
-namespace Sage::Log
+namespace Sage
 {
+
+namespace Logger
+{
+
+// All global variables visible only to this translation unit
 
 // Formatter control
 
@@ -52,34 +57,37 @@ const char LIGHT_VIOLET[] = "\x1B[95m";
 const char LIGHT_BEIGE[] = "\x1B[96m";
 const char LIGHT_WHITE[] = "\x1B[97m";
 
-// Globals
-
-const std::unordered_map<Level, const char*> g_levelColour
+const std::unordered_map<LogLevel, const char*> g_levelColour
 {
-    {Level::Debug,      DARK_BLUE},
-    {Level::Info,       DARK_WHITE},
-    {Level::Warning,    LIGHT_YELLOW},
-    {Level::Error,      LIGHT_RED},
-    {Level::Critical,   DARK_RED},
+    {LogLevel::Trace,      LIGHT_GREEN},
+    {LogLevel::Debug,      DARK_BLUE},
+    {LogLevel::Info,       DARK_WHITE},
+    {LogLevel::Warning,    LIGHT_YELLOW},
+    {LogLevel::Error,      LIGHT_RED},
+    {LogLevel::Critical,   DARK_RED},
 };
 
-const std::unordered_map<Level, const char*> g_levelInfo
+const std::unordered_map<LogLevel, const char*> g_levelInfo
 {
-    {Level::Debug,      "DEBUG"},
-    {Level::Info,       "INFO "},
-    {Level::Warning,    "WARN "},
-    {Level::Error,      "ERROR"},
-    {Level::Critical,   "CRIT "},
+    {LogLevel::Trace,      "TRACE"},
+    {LogLevel::Debug,      "DEBUG"},
+    {LogLevel::Info,       "INFO "},
+    {LogLevel::Warning,    "WARN "},
+    {LogLevel::Error,      "ERROR"},
+    {LogLevel::Critical,   "CRIT "},
 };
 
 std::recursive_mutex g_logMutex;
 
-Level g_currentLogLevel{ Level::Debug };
+LogLevel g_currentLogLevel{ LogLevel::Debug };
 
+// Forward deceleration so we can keep everything in the same place
 class LogStreamer;
 std::atomic<LogStreamer*> g_logStreamer{ nullptr };
 
 // Helper classes / structs
+
+// TODO: Find a way to do this by avoiding vtables
 
 class LogStreamer
 {
@@ -110,34 +118,42 @@ public:
 
     inline void flush() override
     {
-        std::flush(std::cout);
+        // Don't actually need to flush stdout
     }
 };
 
 class FileLogStreamer final : public LogStreamer
 {
 public:
-    FileLogStreamer(const std::string& filename) :
+    FileLogStreamer() :
         m_fileStream{ }
+    { }
+
+    virtual ~FileLogStreamer() = default;
+
+    /**
+     @throws std::exception on failure
+    */
+    void SetLogFile(const std::string& filename)
     {
         if (std::filesystem::exists(filename) and not std::filesystem::is_regular_file(filename))
         {
             throw std::runtime_error("Cannot write to non regular file '" + filename + "'");
         }
 
-        m_fileStream = std::ofstream{ filename , std::ios::out | std::ios::ate | std::ios::app };
+        std::ofstream file{ filename , std::ios::out | std::ios::ate | std::ios::app };
         std::filesystem::permissions(filename,
             std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
             std::filesystem::perm_options::add
         );
 
-        if (not m_fileStream.is_open())
+        if (not file.is_open())
         {
             throw std::runtime_error("Unable to open file '" + filename + "' for writing");
         }
-    }
 
-    virtual ~FileLogStreamer() = default;
+        m_fileStream = std::move(file);
+    }
 
     inline FileLogStreamer& operator<<(const char* log) override
     {
@@ -162,15 +178,18 @@ private:
 
 void SetupLogger(std::optional<std::string> filename)
 {
+    static CoutLogStreamer coutLogStreamer;
+    static FileLogStreamer fileStreamer;
+
     LogStreamer* logStreamer{ nullptr };
 
     // try setup a file logger is specified
-    if (filename.has_value())
+    if (filename)
     {
         try
         {
-            FileLogStreamer* fileStreamer = new FileLogStreamer{ *filename };
-            logStreamer = fileStreamer;
+            fileStreamer.SetLogFile(*filename);
+            logStreamer = &fileStreamer;
         }
         catch (const std::exception& e)
         {
@@ -181,24 +200,10 @@ void SetupLogger(std::optional<std::string> filename)
     // Default to stdout
     if (logStreamer == nullptr)
     {
-        logStreamer = new CoutLogStreamer;
-    }
-
-    if (g_logStreamer != nullptr)
-    {
-        delete g_logStreamer;
+        logStreamer = &coutLogStreamer;
     }
 
     g_logStreamer = logStreamer;
-}
-
-void TeardownLogger()
-{
-    if (g_logStreamer != nullptr)
-    {
-        delete g_logStreamer;
-        g_logStreamer = nullptr;
-    }
 }
 
 struct LogTimestamp
@@ -236,11 +241,11 @@ private:
 
 // Functions
 
-const char* getLevelFormatter(Level level) { return g_levelColour.at(level); }
+const char* getLevelFormatter(LogLevel level) { return g_levelColour.at(level); }
 
-const char* getLevelInfo(Level level) { return g_levelInfo.at(level); }
+const char* getLevelInfo(LogLevel level) { return g_levelInfo.at(level); }
 
-void SetLogLevel(Level logLevel) { g_currentLogLevel = logLevel; }
+void SetLogLevel(LogLevel logLevel) { g_currentLogLevel = logLevel; }
 
 std::string GetThreadName()
 {
@@ -255,7 +260,7 @@ std::string GetThreadName()
     return oss.str();
 }
 
-void LogToStreamer(Level logLevel, const char* msg, va_list args)
+void LogToStreamer(LogLevel logLevel, const char* msg, va_list args)
 {
     using MsgBuffer = char[1024];
 
@@ -284,60 +289,33 @@ void LogToStreamer(Level logLevel, const char* msg, va_list args)
     }
 }
 
-void Debug(const char* msg, ...)
+} // namespace Logger
+
+template<LogLevel level>
+void Log(const char* msg, ...)
 {
-    if (Level::Debug < g_currentLogLevel)
+    if (level < Logger::g_currentLogLevel)
         return;
 
     va_list args;
     va_start(args, msg);
-    LogToStreamer(Level::Debug, msg, args);
+    Logger::LogToStreamer(level, msg, args);
     va_end(args);
 }
 
-void Info(const char* msg, ...)
-{
-    if (Level::Info < g_currentLogLevel)
-        return;
+// Initialize all the logging functions we want
 
-    va_list args;
-    va_start(args, msg);
-    LogToStreamer(Level::Info, msg, args);
-    va_end(args);
-}
+template void Log<LogLevel::Trace>(const char* msg, ...);
 
-void Warning(const char* msg, ...)
-{
-    if (Level::Warning < g_currentLogLevel)
-        return;
+template void Log<LogLevel::Debug>(const char* msg, ...);
 
-    va_list args;
-    va_start(args, msg);
-    LogToStreamer(Level::Warning, msg, args);
-    va_end(args);
-}
+template void Log<LogLevel::Info>(const char* msg, ...);
 
-void Error(const char* msg, ...)
-{
-    if (Level::Error < g_currentLogLevel)
-        return;
+template void Log<LogLevel::Warning>(const char* msg, ...);
 
-    va_list args;
-    va_start(args, msg);
-    LogToStreamer(Level::Error, msg, args);
-    va_end(args);
-}
+template void Log<LogLevel::Error>(const char* msg, ...);
 
-void Critical(const char* msg, ...)
-{
-    if (Level::Critical < g_currentLogLevel)
-        return;
+template void Log<LogLevel::Critical>(const char* msg, ...);
 
-    va_list args;
-    va_start(args, msg);
-    LogToStreamer(Level::Critical, msg, args);
-    va_end(args);
-}
 
-} // namespace Sage::Log
-
+} // namespace Sage

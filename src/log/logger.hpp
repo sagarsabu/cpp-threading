@@ -1,14 +1,15 @@
 #pragma once
 
-#include <functional> // for std::hash
 #include <optional>
 #include <string>
 
-namespace Sage::Log
+namespace Sage
 {
 
-enum class Level
+// So its accessible to the entire namespace
+enum LogLevel
 {
+    Trace,
     Debug,
     Info,
     Warning,
@@ -16,41 +17,23 @@ enum class Level
     Critical
 };
 
-constexpr bool operator<(Level lhs, Level rhs)
+template<LogLevel level>
+[[gnu::format(printf, 1, 2)]]
+void Log(const char* msg, ...);
+
+namespace Logger
+{
+
+constexpr bool operator<(LogLevel lhs, LogLevel rhs)
 {
     return (static_cast<uint8_t>(lhs) < static_cast<uint8_t>(rhs));
 }
 
-void SetLogLevel(Level logLevel);
-
-[[gnu::format(printf, 1, 2)]]
-void Debug(const char* msg, ...);
-
-[[gnu::format(printf, 1, 2)]]
-void Info(const char* msg, ...);
-
-[[gnu::format(printf, 1, 2)]]
-void Warning(const char* msg, ...);
-
-[[gnu::format(printf, 1, 2)]]
-void Error(const char* msg, ...);
-
-[[gnu::format(printf, 1, 2)]]
-void Critical(const char* msg, ...);
+void SetLogLevel(LogLevel logLevel);
 
 void SetupLogger(std::optional<std::string> filename = {});
 
-void TeardownLogger();
+} // namespace Logger
 
-} // namespace Sage::Log
 
-// Template specialization for unordered_collections<Level>
-template<>
-struct std::hash<Sage::Log::Level>
-{
-    size_t operator()(Sage::Log::Level level) const noexcept
-    {
-        size_t hVal = std::hash<size_t>{}(static_cast<size_t>(level));
-        return hVal;
-    }
-};
+} // namespace Sage

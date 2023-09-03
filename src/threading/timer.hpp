@@ -18,6 +18,8 @@ using TimeMilliSec = std::chrono::milliseconds;
 using TimeNanoSec = std::chrono::nanoseconds;
 using TimeSec = std::chrono::seconds;
 
+// Helpers
+
 constexpr timespec MilliSecsToTimeSpec(const TimeMilliSec& duration)
 {
     const TimeSec& seconds = std::chrono::duration_cast<TimeSec>(duration);

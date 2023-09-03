@@ -7,7 +7,6 @@
 namespace Sage::Threading
 {
 
-// Base timer
 
 inline uint GetNextTimerID()
 {
@@ -19,6 +18,8 @@ inline uint GetNextTimerID()
     return rollingTimerId;
 }
 
+// Base timer
+
 Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback& callback) :
     m_timerId{},
     m_timerInterval{
@@ -28,7 +29,7 @@ Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, con
     m_callback{ callback },
     m_id{ GetNextTimerID() }
 {
-    Log::Debug("creating timer with id:%d", m_id);
+    Log<Debug>("creating timer with id:%d", m_id);
 
     sigevent signalEvent{};
     struct sigaction signalAction {};
@@ -45,7 +46,7 @@ Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, con
     signalAction.sa_sigaction = [](int /**sig*/, siginfo_t* si, void* /**uc*/) -> void
     {
         auto callback = static_cast<const TimerCallback*>(si->si_ptr);
-        Log::Debug("triggering callback for timer-id:%d", si->si_timerid);
+        Log<Debug>("triggering callback for timer-id:%d", si->si_timerid);
         (*callback)();
     };
 
@@ -55,25 +56,25 @@ Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, con
     // Setup the signal handler
     if (sigaction(signalEvent.sigev_signo, &signalAction, nullptr) == -1)
     {
-        Log::Critical("failed to set signal action for id:%d. %s", m_id, strerror(errno));
+        Log<Critical>("failed to set signal action for id:%d. %s", m_id, strerror(errno));
         return;
     }
 
     // setup the timer
     if (timer_create(CLOCK_MONOTONIC, &signalEvent, &m_timerId) != 0)
     {
-        Log::Critical("failed to create timer for id:%d. %s", m_id, strerror(errno));
+        Log<Critical>("failed to create timer for id:%d. %s", m_id, strerror(errno));
         return;
     }
 
-    Log::Debug("successfully setup id:%d for thread-id:%d", m_id, gettid());
+    Log<Debug>("successfully setup id:%d for thread-id:%d", m_id, gettid());
 }
 
 Timer::~Timer()
 {
     if (timer_delete(m_timerId) != 0)
     {
-        Log::Critical("failed to delete timer for id:%d. %s", m_id, strerror(errno));
+        Log<Critical>("failed to delete timer for id:%d. %s", m_id, strerror(errno));
     }
 }
 
@@ -81,7 +82,7 @@ void Timer::Start() const
 {
     if (timer_settime(m_timerId, 0, &m_timerInterval, nullptr) != 0)
     {
-        Log::Critical("failed to start time for id:%d. %s", m_id, strerror(errno));
+        Log<Critical>("failed to start time for id:%d. %s", m_id, strerror(errno));
     }
 }
 
@@ -89,7 +90,7 @@ void Timer::Stop() const
 {
     if (timer_settime(m_timerId, 0, &DISABLED_TIMER, nullptr) != 0)
     {
-        Log::Critical("failed to stop time for id:%d. %s", m_id, strerror(errno));
+        Log<Critical>("failed to stop time for id:%d. %s", m_id, strerror(errno));
     }
 }
 

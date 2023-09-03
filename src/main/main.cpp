@@ -12,20 +12,11 @@ std::atomic<Sage::Threading::ManagerThread*> g_managerThread{ nullptr };
 
 int main(int, const char**)
 {
-    int res{ 0 };
-
     // Setup logging
-    Log::SetupLogger();
-    Log::SetLogLevel(Log::Level::Debug);
+    Logger::SetupLogger();
+    Logger::SetLogLevel(LogLevel::Debug);
 
-    auto signalHandler = [](int signal) -> void
-    {
-        Log::Info("SignalHandler received signal:%d", signal);
-        if (g_managerThread != nullptr)
-        {
-            (*g_managerThread).RequestExit();
-        }
-    };
+    int res{ 0 };
 
     // Attach signals
     std::signal(SIGINT, signalHandler);
@@ -55,15 +46,14 @@ int main(int, const char**)
     }
     catch (const std::exception& e)
     {
-        Log::Critical("Caught unexpected std exception. What: %s. Shutting down.", e.what());
+        Log<Critical>("Caught unexpected std exception. What: %s. Shutting down.", e.what());
         res = 2;
     }
     catch (...)
     {
-        Log::Critical("Caught unknown exception. Shutting down.");
+        Log<Critical>("Caught unknown exception. Shutting down.");
         res = 1;
     }
 
-    Log::TeardownLogger();
     return res;
 }

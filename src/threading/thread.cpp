@@ -23,28 +23,28 @@ Thread::Thread(const std::string& threadName) :
     m_stoped{ false },
     m_exitCode{ 0 }
 {
-    Log::Debug("%s c'tor", Name());
+    Log<Debug>("%s c'tor", Name());
 }
 
 Thread::~Thread()
 {
-    Log::Debug("%s d'tor", Name());
+    Log<Debug>("%s d'tor", Name());
 
     if (m_thread.joinable())
     {
         // NOTE: Not sure if this is a great idea as it could cause exit to hang...
-        Log::Debug("%s joining...", Name());
+        Log<Debug>("%s joining...", Name());
         m_thread.join();
     }
 }
 
 void Thread::Start()
 {
-    Log::Info("%s start requested", Name());
+    Log<Info>("%s start requested", Name());
 
     if (m_started)
     {
-        Log::Critical("%s start requested when already starting", Name());
+        Log<Critical>("%s start requested when already starting", Name());
         return;
     }
 
@@ -54,10 +54,10 @@ void Thread::Start()
 
 void Thread::Stop()
 {
-    Log::Info("%s stop requested", Name());
+    Log<Info>("%s stop requested", Name());
     if (m_stoped)
     {
-        Log::Critical("%s stop requested when already stopping", Name());
+        Log<Critical>("%s stop requested when already stopping", Name());
         return;
     }
 
@@ -76,7 +76,7 @@ void Thread::TransmitEvent(UniqueThreadEvent event)
     }
     else
     {
-        Log::Critical("%s transmit-event dropped event for receiver:%s",
+        Log<Critical>("%s transmit-event dropped event for receiver:%s",
             Name(), event->ReceiverName());
     }
 }
@@ -102,14 +102,14 @@ int Thread::Execute()
                 {
                     case SelfEvent::Exit:
                     {
-                        Log::Info("%s received exit event", Name());
+                        Log<Info>("%s received exit event", Name());
                         exitRequested = true;
                         break;
                     }
 
                     default:
                     {
-                        Log::Error("%s default execute got event from unkown event %d from self receiver",
+                        Log<Error>("%s default execute got event from unkown event %d from self receiver",
                             Name(), static_cast<int>(event.Type()));
                         break;
                     }
@@ -121,7 +121,7 @@ int Thread::Execute()
 
             default:
             {
-                Log::Error("%s default execute got event from unkown receiver:%s",
+                Log<Error>("%s default execute got event from unkown receiver:%s",
                     Name(), threadEvent->ReceiverName());
                 break;
             }
@@ -195,12 +195,12 @@ UniqueThreadEvent Thread::WaitForEvent(const TimeMilliSec& timeout)
 
     if (tooManyEvents)
     {
-        Log::Warning("%s wait-for-events max events exceeded threshold:%ld n-handled-events:%ld n-events-this-loop:%ld n-received-events:%ld",
+        Log<Warning>("%s wait-for-events max events exceeded threshold:%ld n-handled-events:%ld n-events-this-loop:%ld n-received-events:%ld",
             Name(), MAX_EVENTS_PER_LOOP, eventsHandled, eventsToHandleThisLoop, currentQueueSize);
     }
     else
     {
-        Log::Debug("%s wait-for-events n-received-events:%ld", Name(), eventsHandled);
+        Log<Debug>("%s wait-for-events n-received-events:%ld", Name(), eventsHandled);
     }
 
     return unhandledThreadEvent;
@@ -208,7 +208,7 @@ UniqueThreadEvent Thread::WaitForEvent(const TimeMilliSec& timeout)
 
 void Thread::HandleEvent(UniqueThreadEvent event)
 {
-    Log::Warning("%s default handle-event discarding event for receiver:%s",
+    Log<Warning>("%s default handle-event discarding event for receiver:%s",
         Name(), event->ReceiverName());
 }
 
@@ -217,15 +217,15 @@ void Thread::Enter()
     pthread_t self = pthread_self();
     pthread_setname_np(self, Name());
 
-    Log::Info("%s starting", Name());
+    Log<Info>("%s starting", Name());
     Starting();
 
-    Log::Info("%s executing ", Name());
+    Log<Info>("%s executing ", Name());
     m_running = true;
     m_exitCode = Execute();
     m_running = false;
 
-    Log::Info("%s stopping", Name());
+    Log<Info>("%s stopping", Name());
     Stopping();
 }
 
@@ -235,7 +235,7 @@ void Thread::FlushEvents()
 
     if (not m_eventQueue.empty())
     {
-        Log::Warning("%s flushing %ld events", Name(), m_eventQueue.size());
+        Log<Warning>("%s flushing %ld events", Name(), m_eventQueue.size());
     }
 
     while (not m_eventQueue.empty())
@@ -243,7 +243,7 @@ void Thread::FlushEvents()
         m_eventQueue.pop();
     }
 
-    Log::Info("%s flushed all events", Name());
+    Log<Info>("%s flushed all events", Name());
 }
 
 } // namespace Sage::Threading

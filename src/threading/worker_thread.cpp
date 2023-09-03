@@ -14,7 +14,7 @@ void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
     if (threadEvent->Receiver() != EventReceiver::WorkerThread)
     {
-        Log::Error("%s handle-event got event for expected receiver:%s",
+        Log<Error>("%s handle-event got event for expected receiver:%s",
             Name(), threadEvent->ReceiverName());
         return;
     }
@@ -25,14 +25,14 @@ void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
         case WorkerEvent::Test:
         {
             auto& rxEvent = static_cast<WorkerTestEvent&>(event);
-            Log::Info("%s handle-event 'Test'. sleeping for %ld ms",
+            Log<Info>("%s handle-event 'Test'. sleeping for %ld ms",
                 Name(), rxEvent.m_timeout.count());
             std::this_thread::sleep_for(rxEvent.m_timeout);
             break;
         }
 
         default:
-            Log::Error("%s handle-event unknown event:%d",
+            Log<Error>("%s handle-event unknown event:%d",
                 Name(), static_cast<int>(event.Type()));
             break;
     }
