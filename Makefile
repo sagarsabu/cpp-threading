@@ -5,15 +5,25 @@ CORES=$(shell nproc)
 BUILD_DIR=$(CURDIR)/build
 BIN_DIR=$(CURDIR)/bin
 
-all: $(BUILD_DIR)
-	+$(CMAKE) --build $(BUILD_DIR) --config Release --target all  -j$(CORES) --
+ifdef DEBUG
+BUILD_MODE=Debug
+else
+BUILD_MODE=Release
+endif
 
-debug: $(BUILD_DIR)
-	+$(CMAKE) --build $(BUILD_DIR) --config Debug --target all  -j$(CORES) --
+all: $(BUILD_DIR)
+	@+$(CMAKE) --build $(BUILD_DIR) --config $(BUILD_MODE) --target all  -j$(CORES) --
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 $(BUILD_DIR): CMakeLists.txt
-	+$(CMAKE) -B $(BUILD_DIR)
+	@+$(CMAKE) \
+		-DCMAKE_BUILD_TYPE:STRING=$(BUILD_MODE) \
+		-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE \
+		-DCMAKE_C_COMPILER:FILEPATH=$(CC) \
+		-DCMAKE_CXX_COMPILER:FILEPATH=$(CXX) \
+		-S $(CURDIR) \
+		-B $(BUILD_DIR) \
+		-G "Unix Makefiles"
 
