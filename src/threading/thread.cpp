@@ -14,14 +14,15 @@ namespace Sage::Threading
 
 Thread::Thread(const std::string& threadName) :
     m_threadName{ threadName },
+    m_threadCreationMtx{},
     m_thread{},
     m_eventQueueMtx{},
     m_eventQueue{},
     m_eventSignal{ 0 },
-    m_started{ false },
+    m_exitCode{ 0 },
     m_running{ false },
-    m_stoped{ false },
-    m_exitCode{ 0 }
+    m_stopping{ false },
+    m_stopTimer{ nullptr }
 {
     Log<Debug>("%s c'tor", Name());
 }
@@ -29,49 +30,60 @@ Thread::Thread(const std::string& threadName) :
 Thread::~Thread()
 {
     Log<Debug>("%s d'tor", Name());
-
-    if (m_thread.joinable())
-    {
-        // NOTE: Not sure if this is a great idea as it could cause exit to hang...
-        Log<Debug>("%s joining...", Name());
-        m_thread.join();
-    }
 }
 
 void Thread::Start()
 {
+    std::lock_guard lock{ m_threadCreationMtx };
+
     Log<Info>("%s start requested", Name());
 
-    if (m_started)
+    if (m_running)
     {
         Log<Critical>("%s start requested when already starting", Name());
         return;
     }
 
-    m_started = true;
-    m_thread = std::thread(&Thread::Enter, this);
+    m_thread = std::jthread(&Thread::Enter, this);
 }
 
 void Thread::Stop()
 {
+    // Hold the lock so no other events can come in
+    std::lock_guard lock{ m_eventQueueMtx };
+
     Log<Info>("%s stop requested", Name());
-    if (m_stoped)
+
+    if (m_stopping)
     {
         Log<Critical>("%s stop requested when already stopping", Name());
         return;
     }
 
-    m_stoped = true;
-    FlushEvents();
-    TransmitEvent(std::make_unique<ExitEvent>());
+    // Clear anything in the queue so we get a faster exit
+    if (not m_eventQueue.empty())
+    {
+        Log<Warning>("%s flushing %ld events", Name(), m_eventQueue.size());
+        while (not m_eventQueue.empty())
+        {
+            m_eventQueue.pop();
+        }
+        Log<Trace>("%s flushed all events", Name());
+    }
+
+    m_eventQueue.emplace(std::make_unique<ExitEvent>());
+    m_eventSignal.release();
+
+    // Stop anymore events coming in
+    m_stopping = true;
 }
 
 void Thread::TransmitEvent(UniqueThreadEvent event)
 {
-    if (m_running)
+    if (not m_stopping)
     {
         std::lock_guard lock{ m_eventQueueMtx };
-        m_eventQueue.push(std::move(event));
+        m_eventQueue.emplace(std::move(event));
         m_eventSignal.release();
     }
     else
@@ -83,13 +95,59 @@ void Thread::TransmitEvent(UniqueThreadEvent event)
 
 int Thread::Execute()
 {
-    bool exitRequested{ false };
-    while (not exitRequested)
+    std::atomic<bool> readyToExit{ false };
+    std::stop_token stopToken{ m_thread.get_stop_token() };
+    // Will be execute on this thread via exit event handling
+    std::stop_callback stopCb(stopToken, [this, &readyToExit]
     {
-        UniqueThreadEvent threadEvent = WaitForEvent();
+        Log<Info>("%s stop callback triggered", Name());
+
+        readyToExit = true;
+        // notify ourselves to wake up
+        m_eventSignal.release();
+    });
+
+    while (not readyToExit)
+    {
+        ProcessEvents();
+    }
+
+    return 0;
+}
+
+void Thread::ProcessEvents(const TimeMilliSec& timeout)
+{
+    ScopedTimer timer{ m_threadName + "@ProcessEvents" };
+    bool hasEvent = m_eventSignal.try_acquire_for(timeout);
+    if (not hasEvent)
+    {
         // Timeout
+        return;
+    }
+
+    size_t eventsQueued{ 0 };
+    {
+        std::lock_guard lock{ m_eventQueueMtx };
+        eventsQueued = m_eventQueue.size();
+    }
+
+    // Don't hold other threads from pushing events to this thread
+    size_t eventsForThisLoop{ std::min(eventsQueued, MAX_EVENTS_PER_LOOP) };
+    bool tooManyEvents = eventsQueued > MAX_EVENTS_PER_LOOP;
+
+    for (size_t eventsHandled{ 0 }; eventsHandled < eventsForThisLoop; eventsHandled++)
+    {
+        UniqueThreadEvent threadEvent{ nullptr };
+        {
+            // Lock only for the smallest scope so other threads aren't blocked when transmitting
+            std::lock_guard lock{ m_eventQueueMtx };
+            threadEvent = std::move(m_eventQueue.front());
+            m_eventQueue.pop();
+        }
+
         if (threadEvent == nullptr)
         {
+            Log<Error>("%s process-events received null event for receiver", Name());
             continue;
         }
 
@@ -97,113 +155,31 @@ int Thread::Execute()
         {
             case EventReceiver::Self:
             {
-                auto& event = static_cast<SelfEvent&>(*threadEvent);
-                switch (event.Type())
-                {
-                    case SelfEvent::Exit:
-                    {
-                        Log<Info>("%s received exit event", Name());
-                        exitRequested = true;
-                        break;
-                    }
-
-                    default:
-                    {
-                        Log<Error>("%s default execute got event from unkown event %d from self receiver",
-                            Name(), static_cast<int>(event.Type()));
-                        break;
-                    }
-                }
-
+                ScopedTimer handleTimer{ m_threadName + "@ProcessEvents::HandleSelfEvent" };
+                HandleSelfEvent(std::move(threadEvent));
                 break;
             }
 
-
             default:
             {
-                Log<Error>("%s default execute got event from unkown receiver:%s",
-                    Name(), threadEvent->ReceiverName());
-                break;
-            }
-        }
-    }
-
-    return 0;
-}
-
-UniqueThreadEvent Thread::WaitForEvent(const TimeMilliSec& timeout)
-{
-    ScopedTimer timer{ m_threadName + "@WaitForEvent" };
-    bool hasEvent = m_eventSignal.try_acquire_for(timeout);
-    if (not hasEvent)
-    {
-        // Timeout
-        return nullptr;
-    }
-
-    size_t currentQueueSize{ 0 };
-    {
-        std::lock_guard lock{ m_eventQueueMtx };
-        currentQueueSize = m_eventQueue.size();
-    }
-
-    UniqueThreadEvent unhandledThreadEvent{ nullptr };
-    // Don't hold other threads from pushing events to this thread
-    size_t eventsToHandleThisLoop{ std::min(currentQueueSize, MAX_EVENTS_PER_LOOP) };
-    size_t eventsHandled{ 0 };
-    while (eventsHandled < eventsToHandleThisLoop)
-    {
-        UniqueThreadEvent threadEvent{ nullptr };
-        {
-            std::lock_guard lock{ m_eventQueueMtx };
-            threadEvent = std::move(m_eventQueue.front());
-            m_eventQueue.pop();
-        }
-
-        bool eventHandled{ false };
-        switch (threadEvent->Receiver())
-        {
-            case EventReceiver::Self:
-                break;
-
-            default:
-            {
-                ScopedTimer handleTimer{ m_threadName + "@WaitForEvent::HandleTimer" };
+                ScopedTimer handleTimer{ m_threadName + "@ProcessEvents::HandleTimer" };
                 HandleEvent(std::move(threadEvent));
-                eventHandled = true;
-                ++eventsHandled;
                 break;
             }
         }
-
-        if (not eventHandled)
-        {
-            // Push event upwards
-            unhandledThreadEvent = std::move(threadEvent);
-            break;
-        }
-    }
-
-    bool tooManyEvents = currentQueueSize > MAX_EVENTS_PER_LOOP;
-    bool hasUnhandledEvent = eventsHandled < eventsToHandleThisLoop;
-
-    if (tooManyEvents or hasUnhandledEvent)
-    {
-        // More to do on next loop so notify ourselves
-        m_eventSignal.release();
     }
 
     if (tooManyEvents)
     {
-        Log<Warning>("%s wait-for-events max events exceeded threshold:%ld n-handled-events:%ld n-events-this-loop:%ld n-received-events:%ld",
-            Name(), MAX_EVENTS_PER_LOOP, eventsHandled, eventsToHandleThisLoop, currentQueueSize);
+        // More to do on next loop so notify ourselves
+        Log<Warning>("%s process-events max events exceeded threshold:%ld events-this-loop:%ld n-received-events:%ld",
+            Name(), MAX_EVENTS_PER_LOOP, eventsForThisLoop, eventsQueued);
+        m_eventSignal.release();
     }
     else
     {
-        Log<Debug>("%s wait-for-events n-received-events:%ld", Name(), eventsHandled);
+        Log<Trace>("%s process-events n-received-events:%ld", Name(), eventsForThisLoop);
     }
-
-    return unhandledThreadEvent;
 }
 
 void Thread::HandleEvent(UniqueThreadEvent event)
@@ -212,38 +188,62 @@ void Thread::HandleEvent(UniqueThreadEvent event)
         Name(), event->ReceiverName());
 }
 
+void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
+{
+    if (threadEvent->Receiver() != EventReceiver::Self)
+    {
+        Log<Critical>("%s handle-self-event got event for unexpected receiver:%s",
+            Name(), threadEvent->ReceiverName());
+        return;
+    }
+
+    auto& event = static_cast<SelfEvent&>(*threadEvent);
+    switch (event.Type())
+    {
+        case SelfEvent::Exit:
+        {
+            Log<Info>("%s received exit event. requesting stop.", Name());
+            // Trigger via timer so we return out of the main processing loop
+            m_stopTimer = std::make_unique<FireOnceTimer>(1ms, [this]
+            {
+                if (m_thread.request_stop())
+                {
+                    Log<Info>("%s stop request has been executed", Name());
+                }
+                else
+                {
+                    Log<Critical>("%s stop request failed to executed", Name());
+                }
+            });
+            m_stopTimer->Start();
+            break;
+        }
+
+        default:
+        {
+            Log<Error>("%s handle-event unknown event:%d",
+                Name(), event.Type());
+            break;
+        }
+    }
+}
+
 void Thread::Enter()
 {
-    pthread_t self = pthread_self();
-    pthread_setname_np(self, Name());
+    m_running = true;
+
+    pthread_setname_np(pthread_self(), Name());
 
     Log<Info>("%s starting", Name());
     Starting();
 
     Log<Info>("%s executing ", Name());
-    m_running = true;
     m_exitCode = Execute();
-    m_running = false;
 
     Log<Info>("%s stopping", Name());
     Stopping();
-}
 
-void Thread::FlushEvents()
-{
-    std::lock_guard lock{ m_eventQueueMtx };
-
-    if (not m_eventQueue.empty())
-    {
-        Log<Warning>("%s flushing %ld events", Name(), m_eventQueue.size());
-    }
-
-    while (not m_eventQueue.empty())
-    {
-        m_eventQueue.pop();
-    }
-
-    Log<Info>("%s flushed all events", Name());
+    m_running = false;
 }
 
 } // namespace Sage::Threading

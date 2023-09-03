@@ -71,14 +71,16 @@ public:
 
     void WaitForExit();
 
-    void WaitUntilWorkersShutdown();
-
-    void WaitUntilManagerShutdown();
+    void WaitForShutdown();
 
 private:
     void SendEventsToWorkers();
 
     void TeardownWorkers();
+
+    void TryWaitForWorkersShutdown();
+
+    void TryWaitForManagerShutdown();
 
     void RequestShutdown();
 

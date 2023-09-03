@@ -19,7 +19,7 @@ struct ScopedTimer final
     {
         auto now = Clock::now();
         auto duration = std::chrono::duration_cast<TimeMilliSec>(now - m_start);
-        Log<Debug>("ScopedTimer '%s' took:%ld ms", m_tag.c_str(), duration.count());
+        Log<Trace>("ScopedTimer '%s' took:%ld ms", m_tag.c_str(), duration.count());
     }
 
 private:

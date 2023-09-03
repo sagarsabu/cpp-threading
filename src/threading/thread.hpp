@@ -44,12 +44,7 @@ public:
 protected:
     virtual void Starting() { }
 
-    // main thread loop
-    virtual int Execute();
-
     virtual void Stopping() { }
-
-    UniqueThreadEvent WaitForEvent(const TimeMilliSec& timeout =  1000ms );
 
     virtual void HandleEvent(UniqueThreadEvent event);
 
@@ -57,18 +52,25 @@ private:
     // thread entry point
     void Enter();
 
-    void FlushEvents();
+    // main thread loop
+    int Execute();
+
+    void ProcessEvents(const TimeMilliSec& timeout = 1000ms);
+
+    // For loop back events for managing this thread
+    void HandleSelfEvent(UniqueThreadEvent event);
 
 private:
     const std::string m_threadName;
-    std::thread m_thread;
+    std::mutex m_threadCreationMtx;
+    std::jthread m_thread;
     std::mutex m_eventQueueMtx;
     std::queue<UniqueThreadEvent> m_eventQueue;
     std::binary_semaphore m_eventSignal;
-    std::atomic<bool> m_started;
-    std::atomic<bool> m_running;
-    std::atomic<bool> m_stoped;
     std::atomic<int> m_exitCode;
+    std::atomic<bool> m_running;
+    std::atomic<bool> m_stopping;
+    std::unique_ptr<FireOnceTimer> m_stopTimer;
 
 private:
     static constexpr size_t MAX_EVENTS_PER_LOOP{ 10 };

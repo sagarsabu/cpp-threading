@@ -13,19 +13,49 @@ namespace Sage::Threading
 
 std::atomic<ManagerThread*> g_managerThread{ nullptr };
 
+// Shutdown timer incase the process / a thread hangs
+std::atomic<PeriodicTimer*> g_shutdownTimer{ nullptr };
+
 void SignalHandler(int signal)
 {
+    static bool  shutdownTimerStarted{ false };
+
     Log<Info>("signal-handler received signal:%d", signal);
 
-    // Shutdown timer incase the process hangs
-    static bool  shutdownTimerStarted{ false };
-    static const auto shutdownStart = Clock::now();
-    static const auto shutdownThreshold{ 5000ms };
-    static const auto shutdownTick{ 1000ms };
-
-    // The shutdown timer
-    static PeriodicTimer shutdownTimer(shutdownTick, [&]
+    if (not shutdownTimerStarted)
     {
+        shutdownTimerStarted = true;
+
+        if (g_managerThread != nullptr)
+        {
+            Log<Info>("signal-handler requesting exit");
+            (*g_managerThread).RequestExit();
+        }
+
+        if (g_shutdownTimer != nullptr)
+        {
+            Log<Info>("signal-handler starting timer");
+            (*g_shutdownTimer).Start();
+        }
+    }
+}
+
+} // namespace Sage::Threading
+
+int main(int, const char**)
+{
+    int res{ 0 };
+
+    // Setup logging
+    Logger::SetupLogger();
+    Logger::SetLogLevel(LogLevel::Debug);
+
+    // Setup the the shutdown timer
+    g_shutdownTimer = new PeriodicTimer(1000ms, []
+    {
+        constexpr auto shutdownThreshold{ 5000ms };
+        static const auto shutdownStart{ Clock::now() };
+
         auto now = Clock::now();
         auto duration = std::chrono::duration_cast<TimeMilliSec>(now - shutdownStart);
         if (duration >= shutdownThreshold)
@@ -40,29 +70,6 @@ void SignalHandler(int signal)
         }
     });
 
-    if (g_managerThread != nullptr)
-    {
-        (*g_managerThread).RequestExit();
-    }
-
-    if (not shutdownTimerStarted)
-    {
-        Log<Info>("signal-handler starting timer");
-        shutdownTimerStarted = true;
-        shutdownTimer.Start();
-    }
-}
-
-} // namespace Sage::Threading
-
-int main(int, const char**)
-{
-    // Setup logging
-    Logger::SetupLogger();
-    Logger::SetLogLevel(LogLevel::Debug);
-
-    int res{ 0 };
-
     // Attach signals
     std::signal(SIGINT, SignalHandler);
     std::signal(SIGQUIT, SignalHandler);
@@ -75,7 +82,7 @@ int main(int, const char**)
 
         manager.Start();
 
-        std::array<WorkerThread, 4> workers;
+        std::array<WorkerThread, 1> workers;
         for (auto& worker : workers)
         {
             worker.Start();
@@ -85,8 +92,7 @@ int main(int, const char**)
         // Make sure main thread waits until exit is requested
         manager.WaitForExit();
         // Make sure main thread waits until shutdown is complete
-        manager.WaitUntilWorkersShutdown();
-        manager.WaitUntilManagerShutdown();
+        manager.WaitForShutdown();
 
         res = manager.ExitCode();
 
@@ -104,5 +110,7 @@ int main(int, const char**)
         res = 1;
     }
 
+    delete g_shutdownTimer;
+    g_shutdownTimer = nullptr;
     return res;
 }

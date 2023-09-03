@@ -34,25 +34,38 @@ void  ManagerThread::RequestExit()
 
 void ManagerThread::WaitForExit()
 {
-    Log<Info>("wait-for-exit '%s' request...", Name());
+    Log<Info>("waiting for exit '%s' request ...", Name());
     m_exitSignal.acquire();
-    Log<Info>("wait-for-exit '%s' triggered...", Name());
+    Log<Info>("wait-for-exit '%s' triggered ...", Name());
 
     TransmitEvent(std::make_unique<ManagerTeardownEvent>());
 }
 
-void ManagerThread::WaitUntilWorkersShutdown()
+void ManagerThread::WaitForShutdown()
 {
-    Log<Info>("wait-until-workers-shutdown '%s' requested", Name());
+    Log<Info>("waiting for shutdown '%s' request ...", Name());
     m_shutdownSignal.acquire();
-    Log<Info>("wait-until-workers-shutdown '%s' triggered", Name());
+    Log<Info>("wait-for-shutdown '%s' triggered ...", Name());
 
-    auto teardownStart = Clock::now();
+    TeardownWorkers();
+    TryWaitForWorkersShutdown();
+
+    // Initiate a stop request
+    Stop();
+
+    TryWaitForManagerShutdown();
+}
+
+void ManagerThread::TryWaitForWorkersShutdown()
+{
+    Log<Info>("%s workers shutdown started", Name());
+
+    auto workerTeardownStart = Clock::now();
     while (WorkersRunning())
     {
         std::this_thread::sleep_for(20ms);
         auto now = Clock::now();
-        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - teardownStart);
+        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - workerTeardownStart);
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
@@ -66,18 +79,16 @@ void ManagerThread::WaitUntilWorkersShutdown()
     Log<Info>("%s workers shutdown complete", Name());
 }
 
-void ManagerThread::WaitUntilManagerShutdown()
+void ManagerThread::TryWaitForManagerShutdown()
 {
-    Stop();
-
     Log<Info>("%s manager shutdown starting", Name());
-    auto teardownStart = Clock::now();
 
+    auto managerTeardownStart = Clock::now();
     while (IsRunning())
     {
         std::this_thread::sleep_for(20ms);
         auto now = Clock::now();
-        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - teardownStart);
+        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - managerTeardownStart);
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
@@ -103,7 +114,7 @@ void ManagerThread::SendEventsToWorkers()
 
     for (auto worker : m_workers)
     {
-        Log<Debug>("%s sending work to %s", Name(), worker->Name());
+        Log<Info>("%s sending work to %s", Name(), worker->Name());
         worker->TransmitEvent(std::make_unique<WorkerTestEvent>(TEST_TIMEOUT));
         Log<Debug>("%s completed sending work to %s", Name(), worker->Name());
     }
@@ -119,19 +130,19 @@ void ManagerThread::TeardownWorkers()
         return;
     }
 
-    Log<Info>("%s tearing down all workers", Name());
-
     m_workersTerminated = true;
+
+    Log<Info>("%s stopping transmit timer", Name());
+    m_transmitTimer->Stop();
+
+    Log<Info>("%s tearing down all workers", Name());
     for (auto worker : m_workers)
     {
         Log<Info>("%s stopping %s", Name(), worker->Name());
         worker->Stop();
     }
 
-    Log<Info>("%s stopping transmit timer", Name());
-    m_transmitTimer->Stop();
-
-    Log<Info>("%s tore down all workers", Name());
+    Log<Info>("%s stop requested for all workers", Name());
 }
 
 void  ManagerThread::RequestShutdown()
@@ -156,13 +167,13 @@ void ManagerThread::Starting()
 {
     Log<Info>("%s starting ...", Name());
 
-    Log<Info>("%s setting up periodic timer for self transmitting", Name());
-
     m_transmitTimer = std::make_unique<PeriodicTimer>(TRANSMIT_PERIOD, [this]
     {
         Log<Debug>("%s triggering self transmit to workers", Name());
         TransmitEvent(std::make_unique<ManagerTransmitWorkEvent>());
     });
+
+    Log<Info>("%s setting up periodic timer for self transmitting", Name());
     m_transmitTimer->Start();
 }
 
@@ -175,7 +186,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
     if (threadEvent->Receiver() != EventReceiver::ManagerThread)
     {
-        Log<Error>("%s handle-event got event for expected receiver:%s",
+        Log<Error>("%s handle-event got event for unexpected receiver:%s",
             Name(), threadEvent->ReceiverName());
         return;
     }
@@ -185,7 +196,6 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
     {
         case ManagerEvent::TeardownWorkers:
         {
-            TeardownWorkers();
             RequestShutdown();
             break;
         }
