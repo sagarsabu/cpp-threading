@@ -6,41 +6,6 @@
 namespace Sage::Threading
 {
 
-// Events
-
-class WorkerEvent : public ThreadEvent
-{
-public:
-    enum Event
-    {
-        Test
-    };
-
-    virtual ~WorkerEvent() = default;
-
-    Event Type() const { return m_event; }
-
-protected:
-    explicit WorkerEvent(Event eventType) :
-        ThreadEvent{ EventReceiver::WorkerThread },
-        m_event{ eventType }
-    { }
-
-private:
-    const Event m_event;
-};
-
-class WorkerTestEvent final : public WorkerEvent
-{
-public:
-    explicit WorkerTestEvent(const TimeMilliSec& timeout) :
-        WorkerEvent{ Event::Test },
-        m_timeout{ timeout }
-    { }
-
-    TimeMilliSec m_timeout;
-};
-
 // Worker thread
 
 class WorkerThread final : public Thread

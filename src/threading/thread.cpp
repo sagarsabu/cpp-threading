@@ -192,7 +192,7 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
 {
     if (threadEvent->Receiver() != EventReceiver::Self)
     {
-        Log<Critical>("%s handle-self-event got event for unexpected receiver:%s",
+        Log<Critical>("%s handle-self-event got event from unexpected receiver:%s",
             Name(), threadEvent->ReceiverName());
         return;
     }

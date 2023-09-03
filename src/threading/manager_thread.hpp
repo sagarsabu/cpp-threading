@@ -21,6 +21,7 @@ public:
     {
         TeardownWorkers,
         TransmitWork,
+        WorkerTest
     };
 
     virtual ~ManagerEvent() = default;
@@ -53,14 +54,25 @@ public:
     { }
 };
 
+class ManagerWorkerTestEvent final : public ManagerEvent
+{
+public:
+    explicit ManagerWorkerTestEvent(const TimeMilliSec& timeout) :
+        ManagerEvent{ Event::WorkerTest },
+        m_timeout{ timeout }
+    { }
+
+    TimeMilliSec m_timeout;
+};
+
 // Manager thread
 
 class ManagerThread final : public Thread
 {
 public:
-    static const inline TimeMilliSec TEARDOWN_THRESHOLD{ 1000ms };
-    static const inline TimeMilliSec TEST_TIMEOUT{ 20ms };
-    static const inline TimeMilliSec TRANSMIT_PERIOD{ 100ms };
+    static constexpr inline TimeMilliSec TEARDOWN_THRESHOLD{ 1000ms };
+    static constexpr inline TimeMilliSec TEST_TIMEOUT{ 20ms };
+    static constexpr inline TimeMilliSec TRANSMIT_PERIOD{ 100ms };
 
 public:
     ManagerThread();

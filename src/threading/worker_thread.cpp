@@ -1,5 +1,6 @@
 #include "log/logger.hpp"
 #include "threading/worker_thread.hpp"
+#include "threading/manager_thread.hpp"
 
 namespace Sage::Threading
 {
@@ -12,19 +13,19 @@ WorkerThread::WorkerThread() :
 
 void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
-    if (threadEvent->Receiver() != EventReceiver::WorkerThread)
+    if (threadEvent->Receiver() != EventReceiver::ManagerThread)
     {
-        Log<Error>("%s handle-event got event for unexpected receiver:%s",
+        Log<Error>("%s handle-event got event from unexpected receiver:%s",
             Name(), threadEvent->ReceiverName());
         return;
     }
 
-    auto& event = static_cast<WorkerEvent&>(*threadEvent);
+    auto& event = static_cast<ManagerEvent&>(*threadEvent);
     switch (event.Type())
     {
-        case WorkerEvent::Test:
+        case ManagerEvent::WorkerTest:
         {
-            auto& rxEvent = static_cast<WorkerTestEvent&>(event);
+            auto& rxEvent = static_cast<ManagerWorkerTestEvent&>(event);
             Log<Info>("%s handle-event 'Test'. sleeping for %ld ms",
                 Name(), rxEvent.m_timeout.count());
             std::this_thread::sleep_for(rxEvent.m_timeout);

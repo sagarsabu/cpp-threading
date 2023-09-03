@@ -115,7 +115,7 @@ void ManagerThread::SendEventsToWorkers()
     for (auto worker : m_workers)
     {
         Log<Info>("%s sending work to %s", Name(), worker->Name());
-        worker->TransmitEvent(std::make_unique<WorkerTestEvent>(TEST_TIMEOUT));
+        worker->TransmitEvent(std::make_unique<ManagerWorkerTestEvent>(TEST_TIMEOUT));
         Log<Debug>("%s completed sending work to %s", Name(), worker->Name());
     }
 }
@@ -186,7 +186,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
     if (threadEvent->Receiver() != EventReceiver::ManagerThread)
     {
-        Log<Error>("%s handle-event got event for unexpected receiver:%s",
+        Log<Error>("%s handle-event got event from unexpected receiver:%s",
             Name(), threadEvent->ReceiverName());
         return;
     }
