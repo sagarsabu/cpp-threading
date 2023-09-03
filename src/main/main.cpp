@@ -14,6 +14,10 @@ int main(int, const char**)
 {
     int res{ 0 };
 
+    // Setup logging
+    Log::SetupLogger();
+    Log::SetLogLevel(Log::Level::Debug);
+
     auto signalHandler = [](int signal) -> void
     {
         Log::Info("SignalHandler received signal:%d", signal);
@@ -27,10 +31,6 @@ int main(int, const char**)
     std::signal(SIGINT, signalHandler);
     std::signal(SIGQUIT, signalHandler);
     std::signal(SIGTERM, signalHandler);
-
-    // Setup logging
-    Log::SetupLogger();
-    Log::SetLogLevel(Log::Level::Debug);
 
     try
     {

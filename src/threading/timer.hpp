@@ -34,16 +34,25 @@ public:
 
     virtual ~Timer();
 
-    void Start();
+    void Start() const;
 
-    void Stop();
+    void Stop() const;
 
 protected:
     Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback& callback);
 
 private:
+    // Nothing in here is movable or copyable
+    Timer(const Timer&) = delete;
+    Timer(Timer&&) = delete;
+    Timer& operator=(const Timer&) = delete;
+    Timer& operator=(Timer&&) = delete;
+
+private:
     timer_t m_timerId;
     const itimerspec m_timerInterval;
+    const TimerCallback m_callback;
+    const uint m_id;
 
 private:
     static const inline itimerspec DISABLED_TIMER{
@@ -57,9 +66,16 @@ private:
 class FireOnceTimer final : public Timer
 {
 public:
+    FireOnceTimer();
+
     FireOnceTimer(const TimeMilliSec& deltaMS, const TimerCallback& callback);
 
-    ~FireOnceTimer() = default;
+private:
+    // Nothing in here is movable or copyable
+    FireOnceTimer(const FireOnceTimer&) = delete;
+    FireOnceTimer(FireOnceTimer&&) = delete;
+    FireOnceTimer& operator=(const FireOnceTimer&) = delete;
+    FireOnceTimer& operator=(FireOnceTimer&&) = delete;
 
 };
 
@@ -68,9 +84,16 @@ public:
 class PeriodicTimer final : public Timer
 {
 public:
+    PeriodicTimer();
+
     PeriodicTimer(const TimeMilliSec& periodMS, const TimerCallback& callback);
 
-    ~PeriodicTimer() = default;
+private:
+    // Nothing in here is movable or copyable
+    PeriodicTimer(const PeriodicTimer&) = delete;
+    PeriodicTimer(PeriodicTimer&&) = delete;
+    PeriodicTimer& operator=(const PeriodicTimer&) = delete;
+    PeriodicTimer& operator=(PeriodicTimer&&) = delete;
 
 };
 

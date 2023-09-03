@@ -19,7 +19,8 @@ class ManagerEvent : public ThreadEvent
 public:
     enum Event
     {
-        TeardownWorkers
+        TeardownWorkers,
+        TransmitWork,
     };
 
     virtual ~ManagerEvent() = default;
@@ -44,6 +45,14 @@ public:
     { }
 };
 
+class ManagerTransmitWorkEvent final : public ManagerEvent
+{
+public:
+    ManagerTransmitWorkEvent() :
+        ManagerEvent{ Event::TransmitWork }
+    { }
+};
+
 // Manager thread
 
 class ManagerThread final : public Thread
@@ -51,6 +60,7 @@ class ManagerThread final : public Thread
 public:
     static const inline TimeMilliSec TEARDOWN_THRESHOLD{ 1000ms };
     static const inline TimeMilliSec TEST_TIMEOUT{ 20ms };
+    static const inline TimeMilliSec TRANSMIT_PERIOD{ 100ms };
 
 public:
     ManagerThread();
@@ -72,19 +82,21 @@ private:
 
     void RequestShutdown();
 
-    bool WorkersRunning() const;
+    bool WorkersRunning();
+
+    void Starting() override;
 
     void Stopping() override;
-
-    int Execute() override;
 
     void HandleEvent(UniqueThreadEvent event) override;
 
 private:
     std::set<Thread*> m_workers;
+    std::mutex m_workersMtx;
     std::atomic<bool> m_workersTerminated;
     std::binary_semaphore m_exitSignal;
     std::binary_semaphore m_shutdownSignal;
+    std::unique_ptr<PeriodicTimer> m_transmitTimer;
 };
 
 } // namespace Sage::Threading

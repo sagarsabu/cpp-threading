@@ -33,5 +33,5 @@ target_include_directories(cpp-threading PUBLIC
 )
 
 target_link_libraries(
-    cpp-threading PUBLIC pthread
+    cpp-threading PUBLIC pthread rt
 )

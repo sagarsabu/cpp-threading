@@ -13,13 +13,16 @@ namespace Sage::Threading
 ManagerThread::ManagerThread() :
     Thread{ "MngrThread" },
     m_workers{},
+    m_workersMtx{},
     m_workersTerminated{ false },
     m_exitSignal{ 0 },
-    m_shutdownSignal{ 0 }
+    m_shutdownSignal{ 0 },
+    m_transmitTimer{ std::make_unique<PeriodicTimer>() } // default does nothing
 { }
 
 void ManagerThread::AttachWorker(Thread* worker)
 {
+    std::lock_guard lock{ m_workersMtx };
     m_workers.emplace(worker);
 }
 
@@ -44,11 +47,11 @@ void ManagerThread::WaitUntilWorkersShutdown()
     m_shutdownSignal.acquire();
     Log::Info("wait-until-workers-shutdown '%s' triggered", Name());
 
-    auto teardownStart = std::chrono::high_resolution_clock::now();
+    auto teardownStart = Clock::now();
     while (WorkersRunning())
     {
         std::this_thread::sleep_for(20ms);
-        auto now = std::chrono::high_resolution_clock::now();
+        auto now = Clock::now();
         auto duration = std::chrono::duration_cast<TimeMilliSec>(now - teardownStart);
 
         if (duration >= TEARDOWN_THRESHOLD)
@@ -68,12 +71,12 @@ void ManagerThread::WaitUntilManagerShutdown()
     Stop();
 
     Log::Info("%s manager shutdown starting", Name());
-    auto teardownStart = std::chrono::high_resolution_clock::now();
+    auto teardownStart = Clock::now();
 
     while (IsRunning())
     {
         std::this_thread::sleep_for(20ms);
-        auto now = std::chrono::high_resolution_clock::now();
+        auto now = Clock::now();
         auto duration = std::chrono::duration_cast<TimeMilliSec>(now - teardownStart);
 
         if (duration >= TEARDOWN_THRESHOLD)
@@ -90,6 +93,8 @@ void ManagerThread::WaitUntilManagerShutdown()
 
 void ManagerThread::SendEventsToWorkers()
 {
+    std::lock_guard lock{ m_workersMtx };
+
     if (m_workersTerminated)
     {
         Log::Warning("%s workers terminated", Name());
@@ -106,6 +111,8 @@ void ManagerThread::SendEventsToWorkers()
 
 void ManagerThread::TeardownWorkers()
 {
+    std::lock_guard lock{ m_workersMtx };
+
     if (m_workersTerminated)
     {
         Log::Critical("%s workers termination has already been requested", Name());
@@ -121,6 +128,9 @@ void ManagerThread::TeardownWorkers()
         worker->Stop();
     }
 
+    Log::Info("%s stopping transmit timer", Name());
+    m_transmitTimer->Stop();
+
     Log::Info("%s tore down all workers", Name());
 }
 
@@ -130,8 +140,10 @@ void  ManagerThread::RequestShutdown()
     m_shutdownSignal.release();
 }
 
-bool ManagerThread::WorkersRunning() const
+bool ManagerThread::WorkersRunning()
 {
+    std::lock_guard lock{ m_workersMtx };
+
     bool aWorkerIsRunning = std::any_of(
         m_workers.cbegin(),
         m_workers.cend(),
@@ -140,67 +152,23 @@ bool ManagerThread::WorkersRunning() const
     return aWorkerIsRunning;
 }
 
-void ManagerThread::Stopping()
+void ManagerThread::Starting()
 {
-    Log::Info("%s stopping...", Name());
+    Log::Info("%s starting ...", Name());
+
+    Log::Info("%s setting up periodic timer for self transmitting", Name());
+
+    m_transmitTimer = std::make_unique<PeriodicTimer>(TRANSMIT_PERIOD, [this]
+    {
+        Log::Debug("%s triggering self transmit to workers", Name());
+        TransmitEvent(std::make_unique<ManagerTransmitWorkEvent>());
+    });
+    m_transmitTimer->Start();
 }
 
-int ManagerThread::Execute()
+void ManagerThread::Stopping()
 {
-    int workerFailed{ 0 };
-    bool exitRequested{ false };
-    while (not exitRequested)
-    {
-        auto threadEvent = WaitForEvent(50ms);
-
-        // Timeout
-        if (threadEvent == nullptr)
-        {
-            SendEventsToWorkers();
-            continue;
-        }
-
-        switch (threadEvent->Receiver())
-        {
-            case EventReceiver::Self:
-            {
-                auto& event = static_cast<SelfEvent&>(*threadEvent);
-                switch (event.Type())
-                {
-                    case SelfEvent::Exit:
-                    {
-                        Log::Info("%s received exit event", Name());
-                        exitRequested = true;
-                        break;
-                    }
-
-                    default:
-                    {
-                        Log::Error("%s execute got event from unkown event %d from self receiver",
-                            Name(), static_cast<int>(event.Type()));
-                        break;
-                    }
-                }
-
-                break;
-            }
-
-
-            default:
-            {
-                Log::Error("%s execute got event for unexpected receiver:%s",
-                    Name(), threadEvent->ReceiverName());
-                break;
-            }
-        }
-    }
-
-    for (auto worker : m_workers)
-    {
-        workerFailed |= (worker->ExitCode() != 0);
-    }
-
-    return workerFailed;
+    Log::Info("%s stopping ...", Name());
 }
 
 void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
@@ -219,6 +187,12 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
         {
             TeardownWorkers();
             RequestShutdown();
+            break;
+        }
+
+        case ManagerEvent::TransmitWork:
+        {
+            SendEventsToWorkers();
             break;
         }
 
