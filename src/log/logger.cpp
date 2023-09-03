@@ -19,72 +19,6 @@ namespace Sage
 namespace Logger
 {
 
-// All global variables visible only to this translation unit
-
-// Formatter control
-
-const char FORMAT_END[] = "\x1B[00m";
-const char FORMAT_BOLD[] = "\x1B[01m";
-const char FORMAT_DISABLED[] = "\x1B[02m";
-const char FORMAT_ITALIC[] = "\x1B[03m";
-const char FORMAT_URL[] = "\x1B[04m";
-const char FORMAT_BLINK[] = "\x1B[05m";
-const char FORMAT_BLINK2[] = "\x1B[06m";
-const char FORMAT_SELECTED[] = "\x1B[07m";
-const char FORMAT_INVISIBLE[] = "\x1B[08m";
-const char FORMAT_STRIKE[] = "\x1B[09m";
-const char FORMAT_DOUBLE_UNDERLINE[] = "\x1B[21m";
-
-// Dark Colours
-
-const char DARK_BLACK[] = "\x1B[30m";
-const char DARK_RED[] = "\x1B[31m";
-const char DARK_GREEN[] = "\x1B[32m";
-const char DARK_YELLOW[] = "\x1B[33m";
-const char DARK_BLUE[] = "\x1B[34m";
-const char DARK_VIOLET[] = "\x1B[35m";
-const char DARK_BEIGE[] = "\x1B[36m";
-const char DARK_WHITE[] = "\x1B[37m";
-
-// Light Colours
-
-const char LIGHT_GREY[] = "\x1B[90m";
-const char LIGHT_RED[] = "\x1B[91m";
-const char LIGHT_GREEN[] = "\x1B[92m";
-const char LIGHT_YELLOW[] = "\x1B[93m";
-const char LIGHT_BLUE[] = "\x1B[94m";
-const char LIGHT_VIOLET[] = "\x1B[95m";
-const char LIGHT_BEIGE[] = "\x1B[96m";
-const char LIGHT_WHITE[] = "\x1B[97m";
-
-const std::unordered_map<LogLevel, const char*> g_levelColour
-{
-    {LogLevel::Trace,      LIGHT_GREEN},
-    {LogLevel::Debug,      DARK_BLUE},
-    {LogLevel::Info,       DARK_WHITE},
-    {LogLevel::Warning,    LIGHT_YELLOW},
-    {LogLevel::Error,      LIGHT_RED},
-    {LogLevel::Critical,   DARK_RED},
-};
-
-const std::unordered_map<LogLevel, const char*> g_levelInfo
-{
-    {LogLevel::Trace,      "TRACE"},
-    {LogLevel::Debug,      "DEBUG"},
-    {LogLevel::Info,       "INFO "},
-    {LogLevel::Warning,    "WARN "},
-    {LogLevel::Error,      "ERROR"},
-    {LogLevel::Critical,   "CRIT "},
-};
-
-std::recursive_mutex g_logMutex;
-
-LogLevel g_currentLogLevel{ LogLevel::Debug };
-
-// Forward deceleration so we can keep everything in the same place
-class LogStreamer;
-std::atomic<LogStreamer*> g_logStreamer{ nullptr };
-
 // Helper classes / structs
 
 // TODO: Find a way to do this by avoiding vtables
@@ -176,11 +110,77 @@ private:
     std::ofstream m_fileStream;
 };
 
+// All global variables visible only to this translation unit
+
+// Formatter control
+
+const char FORMAT_END[] = "\x1B[00m";
+const char FORMAT_BOLD[] = "\x1B[01m";
+const char FORMAT_DISABLED[] = "\x1B[02m";
+const char FORMAT_ITALIC[] = "\x1B[03m";
+const char FORMAT_URL[] = "\x1B[04m";
+const char FORMAT_BLINK[] = "\x1B[05m";
+const char FORMAT_BLINK2[] = "\x1B[06m";
+const char FORMAT_SELECTED[] = "\x1B[07m";
+const char FORMAT_INVISIBLE[] = "\x1B[08m";
+const char FORMAT_STRIKE[] = "\x1B[09m";
+const char FORMAT_DOUBLE_UNDERLINE[] = "\x1B[21m";
+
+// Dark Colours
+
+const char DARK_BLACK[] = "\x1B[30m";
+const char DARK_RED[] = "\x1B[31m";
+const char DARK_GREEN[] = "\x1B[32m";
+const char DARK_YELLOW[] = "\x1B[33m";
+const char DARK_BLUE[] = "\x1B[34m";
+const char DARK_VIOLET[] = "\x1B[35m";
+const char DARK_BEIGE[] = "\x1B[36m";
+const char DARK_WHITE[] = "\x1B[37m";
+
+// Light Colours
+
+const char LIGHT_GREY[] = "\x1B[90m";
+const char LIGHT_RED[] = "\x1B[91m";
+const char LIGHT_GREEN[] = "\x1B[92m";
+const char LIGHT_YELLOW[] = "\x1B[93m";
+const char LIGHT_BLUE[] = "\x1B[94m";
+const char LIGHT_VIOLET[] = "\x1B[95m";
+const char LIGHT_BEIGE[] = "\x1B[96m";
+const char LIGHT_WHITE[] = "\x1B[97m";
+
+const std::unordered_map<LogLevel, const char*> g_levelColour
+{
+    {LogLevel::Trace,      LIGHT_GREEN},
+    {LogLevel::Debug,      DARK_BLUE},
+    {LogLevel::Info,       DARK_WHITE},
+    {LogLevel::Warning,    LIGHT_YELLOW},
+    {LogLevel::Error,      LIGHT_RED},
+    {LogLevel::Critical,   DARK_RED},
+};
+
+const std::unordered_map<LogLevel, const char*> g_levelInfo
+{
+    {LogLevel::Trace,      "TRACE"},
+    {LogLevel::Debug,      "DEBUG"},
+    {LogLevel::Info,       "INFO "},
+    {LogLevel::Warning,    "WARN "},
+    {LogLevel::Error,      "ERROR"},
+    {LogLevel::Critical,   "CRIT "},
+};
+
+std::recursive_mutex g_logMutex;
+
+LogLevel g_currentLogLevel{ LogLevel::Debug };
+
+FileLogStreamer g_fileStreamer;
+
+CoutLogStreamer g_coutLogStreamer;
+
+// Default to cout streamer
+std::atomic<LogStreamer*> g_logStreamer{ &g_coutLogStreamer };
+
 void SetupLogger(std::optional<std::string> filename)
 {
-    static CoutLogStreamer coutLogStreamer;
-    static FileLogStreamer fileStreamer;
-
     LogStreamer* logStreamer{ nullptr };
 
     // try setup a file logger is specified
@@ -188,8 +188,8 @@ void SetupLogger(std::optional<std::string> filename)
     {
         try
         {
-            fileStreamer.SetLogFile(*filename);
-            logStreamer = &fileStreamer;
+            g_fileStreamer.SetLogFile(*filename);
+            logStreamer = &g_fileStreamer;
         }
         catch (const std::exception& e)
         {
@@ -200,7 +200,7 @@ void SetupLogger(std::optional<std::string> filename)
     // Default to stdout
     if (logStreamer == nullptr)
     {
-        logStreamer = &coutLogStreamer;
+        logStreamer = &g_coutLogStreamer;
     }
 
     g_logStreamer = logStreamer;
