@@ -20,7 +20,7 @@ void SignalHandler(int signal)
 {
     static bool  shutdownTimerStarted{ false };
 
-    Log<Info>("signal-handler received signal:%d", signal);
+    Log::Info("signal-handler received signal:%d", signal);
 
     if (not shutdownTimerStarted)
     {
@@ -28,13 +28,13 @@ void SignalHandler(int signal)
 
         if (g_managerThread != nullptr)
         {
-            Log<Info>("signal-handler requesting exit");
+            Log::Info("signal-handler requesting exit");
             (*g_managerThread).RequestExit();
         }
 
         if (g_shutdownTimer != nullptr)
         {
-            Log<Info>("signal-handler starting timer");
+            Log::Info("signal-handler starting timer");
             (*g_shutdownTimer).Start();
         }
     }
@@ -48,7 +48,7 @@ int main(int, const char**)
 
     // Setup logging
     Logger::SetupLogger();
-    Logger::SetLogLevel(LogLevel::Debug);
+    Logger::SetLogLevel(Logger::Level::Debug);
 
     // Setup the the shutdown timer
     g_shutdownTimer = new PeriodicTimer(1000ms, []
@@ -61,12 +61,12 @@ int main(int, const char**)
         if (duration >= shutdownThreshold)
         {
             // Can't be caught so the oS kill kill us
-            Log<Critical>("shutdown duration exceeded. forcing shutdown");
+            Log::Critical("shutdown duration exceeded. forcing shutdown");
             raise(SIGKILL);
         }
         else
         {
-            Log<Warning>("shutdown duration at %ld ms", duration.count());
+            Log::Warning("shutdown duration at %ld ms", duration.count());
         }
     });
 
@@ -101,12 +101,12 @@ int main(int, const char**)
     }
     catch (const std::exception& e)
     {
-        Log<Critical>("Caught unexpected std exception. What: %s. Shutting down.", e.what());
+        Log::Critical("Caught unexpected std exception. What: %s. Shutting down.", e.what());
         res = 2;
     }
     catch (...)
     {
-        Log<Critical>("Caught unknown exception. Shutting down.");
+        Log::Critical("Caught unknown exception. Shutting down.");
         res = 1;
     }
 

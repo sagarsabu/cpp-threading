@@ -110,6 +110,39 @@ private:
     std::ofstream m_fileStream;
 };
 
+struct LogTimestamp
+{
+    // e.g "01 - 09 - 2023 00:42 : 19"
+    using SecondsBuffer = char[26];
+    // :%03u requires 7 bytes max
+    using MilliSecBuffer = char[7];
+
+    LogTimestamp()
+    {
+        ::clock_gettime(CLOCK_REALTIME, &m_timeSpec);
+
+        uint16_t millisec = static_cast<uint16_t>(m_timeSpec.tv_nsec / 1'000'000U);
+        // incase of overflow
+        if (millisec >= 1000U)
+        {
+            millisec = static_cast<uint16_t>(millisec - 1000U);
+            m_timeSpec.tv_sec++;
+        }
+
+        std::strftime(m_secondsBuffer, sizeof(m_secondsBuffer), "%d-%m-%Y %H:%M:%S", std::localtime(&m_timeSpec.tv_sec));
+        snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03u", millisec);
+    }
+
+    inline const SecondsBuffer& getSecondsBuffer() const { return m_secondsBuffer; };
+
+    inline const MilliSecBuffer& getMilliSecBuffer() const { return m_msSecBuff; };
+
+private:
+    SecondsBuffer m_secondsBuffer;
+    MilliSecBuffer m_msSecBuff;
+    ::timespec m_timeSpec;
+};
+
 // All global variables visible only to this translation unit
 
 // Formatter control
@@ -148,29 +181,29 @@ const char LIGHT_VIOLET[] = "\x1B[95m";
 const char LIGHT_BEIGE[] = "\x1B[96m";
 const char LIGHT_WHITE[] = "\x1B[97m";
 
-const std::unordered_map<LogLevel, const char*> g_levelColour
+const std::unordered_map<Level, const char*> g_levelColour
 {
-    {LogLevel::Trace,      LIGHT_GREEN},
-    {LogLevel::Debug,      DARK_BLUE},
-    {LogLevel::Info,       DARK_WHITE},
-    {LogLevel::Warning,    LIGHT_YELLOW},
-    {LogLevel::Error,      LIGHT_RED},
-    {LogLevel::Critical,   DARK_RED},
+    {Level::Trace,      LIGHT_GREEN},
+    {Level::Debug,      DARK_BLUE},
+    {Level::Info,       DARK_WHITE},
+    {Level::Warning,    LIGHT_YELLOW},
+    {Level::Error,      LIGHT_RED},
+    {Level::Critical,   DARK_RED},
 };
 
-const std::unordered_map<LogLevel, const char*> g_levelInfo
+const std::unordered_map<Level, const char*> g_levelInfo
 {
-    {LogLevel::Trace,      "TRACE"},
-    {LogLevel::Debug,      "DEBUG"},
-    {LogLevel::Info,       "INFO "},
-    {LogLevel::Warning,    "WARN "},
-    {LogLevel::Error,      "ERROR"},
-    {LogLevel::Critical,   "CRIT "},
+    {Level::Trace,      "TRACE"},
+    {Level::Debug,      "DEBUG"},
+    {Level::Info,       "INFO "},
+    {Level::Warning,    "WARN "},
+    {Level::Error,      "ERROR"},
+    {Level::Critical,   "CRIT "},
 };
 
 std::recursive_mutex g_logMutex;
 
-LogLevel g_currentLogLevel{ LogLevel::Debug };
+Level g_currentLogLevel{ Level::Debug };
 
 FileLogStreamer g_fileStreamer;
 
@@ -178,6 +211,10 @@ CoutLogStreamer g_coutLogStreamer;
 
 // Default to cout streamer
 std::atomic<LogStreamer*> g_logStreamer{ &g_coutLogStreamer };
+
+// Functions
+
+void SetLogLevel(Level logLevel) { g_currentLogLevel = logLevel; }
 
 void SetupLogger(std::optional<std::string> filename)
 {
@@ -206,48 +243,11 @@ void SetupLogger(std::optional<std::string> filename)
     g_logStreamer = logStreamer;
 }
 
-struct LogTimestamp
-{
-    // e.g "01 - 09 - 2023 00:42 : 19"
-    using SecondsBuffer = char[26];
-    // :%03u requires 7 bytes max
-    using MilliSecBuffer = char[7];
+inline const char* GetLevelFormatter(Level level) { return g_levelColour.at(level); }
 
-    LogTimestamp()
-    {
-        ::clock_gettime(CLOCK_REALTIME, &m_timeSpec);
+inline const char* GetLevelInfo(Level level) { return g_levelInfo.at(level); }
 
-        uint16_t millisec = static_cast<uint16_t>(m_timeSpec.tv_nsec / 1'000'000U);
-        // incase of overflow
-        if (millisec >= 1000U)
-        {
-            millisec = static_cast<uint16_t>(millisec - 1000U);
-            m_timeSpec.tv_sec++;
-        }
-
-        std::strftime(m_secondsBuffer, sizeof(m_secondsBuffer), "%d-%m-%Y %H:%M:%S", std::localtime(&m_timeSpec.tv_sec));
-        snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03u", millisec);
-    }
-
-    inline const SecondsBuffer& getSecondsBuffer() const { return m_secondsBuffer; };
-
-    inline const MilliSecBuffer& getMilliSecBuffer() const { return m_msSecBuff; };
-
-private:
-    SecondsBuffer m_secondsBuffer;
-    MilliSecBuffer m_msSecBuff;
-    ::timespec m_timeSpec;
-};
-
-// Functions
-
-const char* getLevelFormatter(LogLevel level) { return g_levelColour.at(level); }
-
-const char* getLevelInfo(LogLevel level) { return g_levelInfo.at(level); }
-
-void SetLogLevel(LogLevel logLevel) { g_currentLogLevel = logLevel; }
-
-std::string GetThreadName()
+inline std::string GetThreadName()
 {
     // Max allowed buffer for POSIX thread name
     using ThreadNameBuffer = char[16];
@@ -260,21 +260,21 @@ std::string GetThreadName()
     return oss.str();
 }
 
-void LogToStreamer(LogLevel logLevel, const char* msg, va_list args)
+inline void LogToStreamer(Level level, const char* fmt, va_list args)
 {
     using MsgBuffer = char[1024];
 
     static const thread_local std::string threadName{ GetThreadName() };
 
     MsgBuffer msgBuff;
-    vsnprintf(msgBuff, sizeof(msgBuff), msg, args);
+    vsnprintf(msgBuff, sizeof(msgBuff), fmt, args);
 
     LogTimestamp ts;
     const LogTimestamp::SecondsBuffer& secondsBuffer{ ts.getSecondsBuffer() };
     const LogTimestamp::MilliSecBuffer& milliSecBuffer{ ts.getMilliSecBuffer() };
 
-    const char* levelFmt{ getLevelFormatter(logLevel) };
-    const char* levelInfo{ getLevelInfo(logLevel) };
+    const char* levelFmt{ GetLevelFormatter(level) };
+    const char* levelInfo{ GetLevelInfo(level) };
 
     {
         std::lock_guard lock{ g_logMutex };
@@ -291,31 +291,75 @@ void LogToStreamer(LogLevel logLevel, const char* msg, va_list args)
 
 } // namespace Logger
 
-template<LogLevel level>
-void Log(const char* msg, ...)
+namespace Log
 {
-    if (level < Logger::g_currentLogLevel)
+
+void Trace(const char* msg, ...)
+{
+    if (Logger::Trace < Logger::g_currentLogLevel)
         return;
 
     va_list args;
     va_start(args, msg);
-    Logger::LogToStreamer(level, msg, args);
+    Logger::LogToStreamer(Logger::Trace, msg, args);
     va_end(args);
 }
 
-// Initialize all the logging functions we want
+void Debug(const char* msg, ...)
+{
+    if (Logger::Debug < Logger::g_currentLogLevel)
+        return;
 
-template void Log<LogLevel::Trace>(const char* msg, ...);
+    va_list args;
+    va_start(args, msg);
+    Logger::LogToStreamer(Logger::Debug, msg, args);
+    va_end(args);
+}
 
-template void Log<LogLevel::Debug>(const char* msg, ...);
+void Info(const char* msg, ...)
+{
+    if (Logger::Info < Logger::g_currentLogLevel)
+        return;
 
-template void Log<LogLevel::Info>(const char* msg, ...);
+    va_list args;
+    va_start(args, msg);
+    Logger::LogToStreamer(Logger::Info, msg, args);
+    va_end(args);
+}
 
-template void Log<LogLevel::Warning>(const char* msg, ...);
+void Warning(const char* msg, ...)
+{
+    if (Logger::Warning < Logger::g_currentLogLevel)
+        return;
 
-template void Log<LogLevel::Error>(const char* msg, ...);
+    va_list args;
+    va_start(args, msg);
+    Logger::LogToStreamer(Logger::Warning, msg, args);
+    va_end(args);
+}
 
-template void Log<LogLevel::Critical>(const char* msg, ...);
+void Error(const char* msg, ...)
+{
+    if (Logger::Error < Logger::g_currentLogLevel)
+        return;
 
+    va_list args;
+    va_start(args, msg);
+    Logger::LogToStreamer(Logger::Error, msg, args);
+    va_end(args);
+}
+
+void Critical(const char* msg, ...)
+{
+    if (Logger::Critical < Logger::g_currentLogLevel)
+        return;
+
+    va_list args;
+    va_start(args, msg);
+    Logger::LogToStreamer(Logger::Critical, msg, args);
+    va_end(args);
+}
+
+} // namespace Log
 
 } // namespace Sage
