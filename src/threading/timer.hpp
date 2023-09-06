@@ -40,6 +40,8 @@ public:
 
     void Stop() const;
 
+    uint Id() const { return m_signalData.m_timerId; };
+
 protected:
     Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback& callback);
 
@@ -50,11 +52,16 @@ private:
     Timer& operator=(const Timer&) = delete;
     Timer& operator=(Timer&&) = delete;
 
+    struct SigValData
+    {
+        const TimerCallback m_callback;
+        const uint m_timerId;
+    };
+
 private:
-    timer_t m_timerId;
+    timer_t m_timer;
     const itimerspec m_timerInterval;
-    const TimerCallback m_callback;
-    const uint m_id;
+    const SigValData m_signalData;
 
 private:
     static const inline itimerspec DISABLED_TIMER{

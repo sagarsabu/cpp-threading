@@ -10,14 +10,18 @@
 namespace Sage::Threading
 {
 
+enum ManagerTimerEvent
+{
+    TransmitWork
+};
+
 ManagerThread::ManagerThread() :
     Thread{ "MngrThread" },
     m_workers{},
     m_workersMtx{},
     m_workersTerminated{ false },
     m_exitSignal{ 0 },
-    m_shutdownSignal{ 0 },
-    m_transmitTimer{ std::make_unique<PeriodicTimer>() } // default does nothing
+    m_shutdownSignal{ 0 }
 { }
 
 void ManagerThread::AttachWorker(Thread* worker)
@@ -133,7 +137,7 @@ void ManagerThread::TeardownWorkers()
     m_workersTerminated = true;
 
     Log::Info("%s stopping transmit timer", Name());
-    m_transmitTimer->Stop();
+    RemoveTimer(ManagerTimerEvent::TransmitWork);
 
     Log::Info("%s tearing down all workers", Name());
     for (auto worker : m_workers)
@@ -167,14 +171,10 @@ void ManagerThread::Starting()
 {
     Log::Info("%s starting ...", Name());
 
-    m_transmitTimer = std::make_unique<PeriodicTimer>(TRANSMIT_PERIOD, [this]
-    {
-        Log::Debug("%s triggering self transmit to workers", Name());
-        TransmitEvent(std::make_unique<ManagerTransmitWorkEvent>());
-    });
-
     Log::Info("%s setting up periodic timer for self transmitting", Name());
-    m_transmitTimer->Start();
+
+    AddPeriodicTimer(ManagerTimerEvent::TransmitWork, TRANSMIT_PERIOD);
+    StartTimer(ManagerTimerEvent::TransmitWork);
 }
 
 void ManagerThread::Stopping()
@@ -184,32 +184,55 @@ void ManagerThread::Stopping()
 
 void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
-    if (threadEvent->Receiver() != EventReceiver::ManagerThread)
+    switch (threadEvent->Receiver())
     {
-        Log::Error("%s handle-event got event from unexpected receiver:%s",
-            Name(), threadEvent->ReceiverName());
-        return;
-    }
-
-    auto& event = static_cast<ManagerEvent&>(*threadEvent);
-    switch (event.Type())
-    {
-        case ManagerEvent::TeardownWorkers:
+        case EventReceiver::Timer:
         {
-            RequestShutdown();
+            auto& event = static_cast<TimerEvent&>(*threadEvent);
+            switch (event.Type())
+            {
+                case ManagerTimerEvent::TransmitWork:
+                {
+                    SendEventsToWorkers();
+                    break;
+                }
+
+                default:
+                {
+                    Log::Error("%s handle-event got unkown timer event:%d", Name(), event.Type());
+                    break;
+                }
+            }
+
             break;
         }
 
-        case ManagerEvent::TransmitWork:
+        case EventReceiver::ManagerThread:
         {
-            SendEventsToWorkers();
+
+            auto& event = static_cast<ManagerEvent&>(*threadEvent);
+            switch (event.Type())
+            {
+                case ManagerEvent::TeardownWorkers:
+                {
+                    RequestShutdown();
+                    break;
+                }
+
+                default:
+                {
+                    Log::Error("%s handle-event got unkown manager event:%d", Name(), event.Type());
+                    break;
+                }
+            }
+
             break;
         }
 
         default:
         {
-            Log::Error("%s handle-event got unkown event:%d",
-                Name(), static_cast<int>(event.Type()));
+            Log::Error("%s handle-event got event from unexpected receiver:%s",
+                Name(), threadEvent->ReceiverName());
             break;
         }
     }

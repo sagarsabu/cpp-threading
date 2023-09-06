@@ -20,7 +20,6 @@ public:
     enum Event
     {
         TeardownWorkers,
-        TransmitWork,
         WorkerTest
     };
 
@@ -46,14 +45,6 @@ public:
     { }
 };
 
-class ManagerTransmitWorkEvent final : public ManagerEvent
-{
-public:
-    ManagerTransmitWorkEvent() :
-        ManagerEvent{ Event::TransmitWork }
-    { }
-};
-
 class ManagerWorkerTestEvent final : public ManagerEvent
 {
 public:
@@ -71,8 +62,8 @@ class ManagerThread final : public Thread
 {
 public:
     static constexpr inline TimeMilliSec TEARDOWN_THRESHOLD{ 1000ms };
-    static constexpr inline TimeMilliSec TEST_TIMEOUT{ 20ms };
-    static constexpr inline TimeMilliSec TRANSMIT_PERIOD{ 100ms };
+    static constexpr inline TimeMilliSec TEST_TIMEOUT{ 10ms };
+    static constexpr inline TimeMilliSec TRANSMIT_PERIOD{ 15ms };
 
 public:
     ManagerThread();
@@ -110,7 +101,6 @@ private:
     std::atomic<bool> m_workersTerminated;
     std::binary_semaphore m_exitSignal;
     std::binary_semaphore m_shutdownSignal;
-    std::unique_ptr<PeriodicTimer> m_transmitTimer;
 };
 
 } // namespace Sage::Threading

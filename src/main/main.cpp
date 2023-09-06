@@ -82,7 +82,7 @@ int main(int, const char**)
 
         manager.Start();
 
-        std::array<WorkerThread, 1> workers;
+        std::array<WorkerThread, 2> workers;
         for (auto& worker : workers)
         {
             worker.Start();

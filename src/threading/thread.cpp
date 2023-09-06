@@ -7,22 +7,24 @@
 #include "log/logger.hpp"
 #include "threading/thread.hpp"
 #include "threading/events.hpp"
-#include "threading/scoped_timer.hpp"
+#include "threading/scoped_deadline.hpp"
 
 namespace Sage::Threading
 {
 
-Thread::Thread(const std::string& threadName) :
+Thread::Thread(const std::string& threadName, const TimeMilliSec& handleEventThreshold) :
     m_threadName{ threadName },
-    m_threadCreationMtx{},
-    m_thread{},
+    m_thread{ &Thread::Enter, this },
     m_eventQueueMtx{},
     m_eventQueue{},
     m_eventSignal{ 0 },
     m_exitCode{ 0 },
+    m_startLatch{ 1 },
     m_running{ false },
     m_stopping{ false },
-    m_stopTimer{ nullptr }
+    m_stopTimer{ nullptr },
+    m_timerEvents{},
+    m_handleEventThreshold{ handleEventThreshold }
 {
     Log::Debug("%s c'tor", Name());
 }
@@ -34,17 +36,8 @@ Thread::~Thread()
 
 void Thread::Start()
 {
-    std::lock_guard lock{ m_threadCreationMtx };
-
     Log::Info("%s start requested", Name());
-
-    if (m_running)
-    {
-        Log::Critical("%s start requested when already starting", Name());
-        return;
-    }
-
-    m_thread = std::jthread(&Thread::Enter, this);
+    m_startLatch.count_down();
 }
 
 void Thread::Stop()
@@ -93,6 +86,77 @@ void Thread::TransmitEvent(UniqueThreadEvent event)
     }
 }
 
+void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeMilliSec period)
+{
+    auto itr = m_timerEvents.find(timerEventId);
+    if (itr != m_timerEvents.end())
+    {
+        Log::Error("%s add-periodic-timer timer-event-id:%d already exists", Name(), timerEventId);
+        return;
+    }
+
+    m_timerEvents[timerEventId] = std::make_unique<PeriodicTimer>(period, [this, timerEventId]
+    {
+        TransmitEvent(std::make_unique<TimerEvent>(timerEventId));
+    });
+}
+
+void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeMilliSec delta)
+{
+    auto itr = m_timerEvents.find(timerEventId);
+    if (itr != m_timerEvents.end())
+    {
+        Log::Error("%s add-fire-once-timer timer-event-id:%d already exists", Name(), timerEventId);
+        return;
+    }
+
+    m_timerEvents[timerEventId] = std::make_unique<FireOnceTimer>(delta, [this, timerEventId]
+    {
+        TransmitEvent(std::make_unique<TimerEvent>(timerEventId));
+    });
+}
+
+void Thread::RemoveTimer(TimerEvent::EventID timerEventId)
+{
+    auto itr = m_timerEvents.find(timerEventId);
+    if (itr == m_timerEvents.end())
+    {
+        Log::Error("%s remove-timer timer-event-id:%d does not exist", Name(), timerEventId);
+        return;
+    }
+
+    m_timerEvents.erase(itr);
+}
+
+void Thread::StartTimer(TimerEvent::EventID timerEventId) const
+{
+    auto itr = m_timerEvents.find(timerEventId);
+    if (itr != m_timerEvents.end())
+    {
+        Log::Debug("%s start-timer timer-event-id:%d timer-id:%d", Name(), timerEventId, itr->second->Id());
+        itr->second->Start();
+    }
+    else
+    {
+        Log::Error("%s start-timer timer-event-id:%d does not exist", Name(), timerEventId);
+    }
+}
+
+void Thread::StopTimer(TimerEvent::EventID timerEventId) const
+{
+    auto itr = m_timerEvents.find(timerEventId);
+    if (itr != m_timerEvents.end())
+    {
+        Log::Debug("%s stop-timer timer-event-id:%d timer-id:%d", Name(), timerEventId, itr->second->Id());
+        itr->second->Stop();
+    }
+    else
+    {
+        Log::Error("%s stop-timer timer-event-id:%d does not exist", Name(), timerEventId);
+    }
+}
+
+
 int Thread::Execute()
 {
     std::atomic<bool> readyToExit{ false };
@@ -117,7 +181,7 @@ int Thread::Execute()
 
 void Thread::ProcessEvents(const TimeMilliSec& timeout)
 {
-    ScopedTimer timer{ m_threadName + "@ProcessEvents" };
+    ScopedDeadline processDeadline{ m_threadName + "@ProcessEvents", timeout };
     bool hasEvent = m_eventSignal.try_acquire_for(timeout);
     if (not hasEvent)
     {
@@ -155,14 +219,14 @@ void Thread::ProcessEvents(const TimeMilliSec& timeout)
         {
             case EventReceiver::Self:
             {
-                ScopedTimer handleTimer{ m_threadName + "@ProcessEvents::HandleSelfEvent" };
+                ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleSelfEvent", m_handleEventThreshold };
                 HandleSelfEvent(std::move(threadEvent));
                 break;
             }
 
             default:
             {
-                ScopedTimer handleTimer{ m_threadName + "@ProcessEvents::HandleTimer" };
+                ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleTimer", m_handleEventThreshold };
                 HandleEvent(std::move(threadEvent));
                 break;
             }
@@ -230,9 +294,12 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
 
 void Thread::Enter()
 {
-    m_running = true;
-
     pthread_setname_np(pthread_self(), Name());
+
+    // For for start trigger
+    m_startLatch.wait();
+
+    m_running = true;
 
     Log::Info("%s starting", Name());
     Starting();

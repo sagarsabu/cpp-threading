@@ -10,6 +10,7 @@ namespace Sage::Threading
 enum class EventReceiver
 {
     Self, // loop back events
+    Timer,
     ManagerThread,
     WorkerThread
 };
@@ -26,6 +27,7 @@ public:
         static const std::unordered_map<EventReceiver, const char*> receiverNameMap
         {
             {EventReceiver::Self,             "Self"},
+            {EventReceiver::Timer,            "Timer"},
             {EventReceiver::ManagerThread,    "ManagerThread"},
             {EventReceiver::WorkerThread,     "WorkerThread"},
         };
@@ -78,6 +80,23 @@ public:
     { }
 };
 
+class TimerEvent final : public ThreadEvent
+{
+public:
+    using EventID = int;
+
+    explicit TimerEvent(EventID timerEvent) :
+        ThreadEvent{ EventReceiver::Timer },
+        m_timerEvent{ timerEvent }
+    { }
+
+    virtual ~TimerEvent() = default;
+
+    EventID Type() const { return m_timerEvent; }
+
+private:
+    const EventID m_timerEvent;
+};
 
 } // namespace Sage::Threading
 
