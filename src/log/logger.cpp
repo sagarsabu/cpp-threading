@@ -119,7 +119,7 @@ struct LogTimestamp
 
     LogTimestamp()
     {
-        ::clock_gettime(CLOCK_REALTIME, &m_timeSpec);
+        std::timespec_get(&m_timeSpec, TIME_UTC);
 
         uint16_t millisec = static_cast<uint16_t>(m_timeSpec.tv_nsec / 1'000'000U);
         // incase of overflow
