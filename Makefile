@@ -1,4 +1,5 @@
-.PHONY: all debug clean
+.PHONY: all debug
+.PHONY: clean clean-cmake
 
 CMAKE=$(shell which cmake)
 CORES=$(shell nproc)
@@ -16,7 +17,10 @@ all: $(BUILD_DIR)
 	@+$(CMAKE) --build $(BUILD_DIR) --config $(BUILD_MODE) --target all  -j$(CORES) --
 
 clean:
-	rm -rf $(BUILD_DIR) $(BIN_DIR)
+	rm -rf $(BIN_DIR)
+
+clean-cmake:
+	rm -rf $(BUILD_DIR)
 
 $(BUILD_DIR): CMakeLists.txt
 	$(info Generating '$(BUILD_MODE)' cmake build config)
@@ -28,4 +32,3 @@ $(BUILD_DIR): CMakeLists.txt
 		-S $(CURDIR) \
 		-B $(BUILD_DIR) \
 		-G "Unix Makefiles"
-

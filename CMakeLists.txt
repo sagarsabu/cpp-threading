@@ -14,7 +14,6 @@ add_compile_options(
     -Werror
     -Wattributes
     -Wconversion
-    -Wdangling-pointer
     -Wduplicated-cond
     -Wduplicated-branches
     -Wformat
