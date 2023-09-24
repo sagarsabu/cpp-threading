@@ -40,19 +40,19 @@ public:
 
     inline CoutLogStreamer& operator<<(const char* log) override
     {
-        std::cout << log;
+        std::clog << log;
         return *this;
     }
 
     inline CoutLogStreamer& operator<<(const char log) override
     {
-        std::cout << log;
+        std::clog << log;
         return *this;
     }
 
     inline void flush() override
     {
-        // Don't actually need to flush stdout
+        std::flush(std::clog);
     }
 };
 
