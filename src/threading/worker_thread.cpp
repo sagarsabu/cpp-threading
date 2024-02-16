@@ -13,9 +13,9 @@ WorkerThread::WorkerThread() :
 
 void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
-    if (threadEvent->Receiver() != EventReceiver::ManagerThread)
+    if (threadEvent->Receiver() != EventReceiver::WorkerThread)
     {
-        Log::Error("%s handle-event got event from unexpected receiver:%s",
+        Log::Error("%s handle-event got event intended for receiver:%s",
             Name(), threadEvent->ReceiverName());
         return;
     }

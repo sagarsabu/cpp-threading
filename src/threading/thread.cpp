@@ -1,13 +1,9 @@
-#include <thread>
-#include <queue>
-#include <memory>
-#include <string>
 #include <cassert>
 
 #include "log/logger.hpp"
+#include "timers/scoped_deadline.hpp"
 #include "threading/thread.hpp"
 #include "threading/events.hpp"
-#include "threading/scoped_deadline.hpp"
 
 namespace Sage::Threading
 {
@@ -15,15 +11,6 @@ namespace Sage::Threading
 Thread::Thread(const std::string& threadName, const TimeMilliSec& handleEventThreshold) :
     m_threadName{ threadName },
     m_thread{ &Thread::Enter, this },
-    m_eventQueueMtx{},
-    m_eventQueue{},
-    m_eventSignal{ 0 },
-    m_exitCode{ 0 },
-    m_startLatch{ 1 },
-    m_running{ false },
-    m_stopping{ false },
-    m_stopTimer{ nullptr },
-    m_timerEvents{},
     m_handleEventThreshold{ handleEventThreshold }
 {
     Log::Debug("%s c'tor", Name());
@@ -179,10 +166,10 @@ int Thread::Execute()
     return 0;
 }
 
-void Thread::ProcessEvents(const TimeMilliSec& timeout)
+void Thread::ProcessEvents()
 {
-    ScopedDeadline processDeadline{ m_threadName + "@ProcessEvents", timeout };
-    bool hasEvent = m_eventSignal.try_acquire_for(timeout);
+    ScopedDeadline processDeadline{ m_threadName + "@ProcessEvents", PROCESS_EVENTS_THRESHOLD };
+    bool hasEvent{ m_eventSignal.try_acquire_for(PROCESS_EVENTS_THRESHOLD) };
     if (not hasEvent)
     {
         // Timeout

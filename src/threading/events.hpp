@@ -58,7 +58,7 @@ public:
         Exit
     };
 
-    virtual ~SelfEvent() = default;
+    virtual ~SelfEvent() override = default;
 
     Event Type() const { return m_event; }
 
@@ -89,8 +89,6 @@ public:
         ThreadEvent{ EventReceiver::Timer },
         m_timerEvent{ timerEvent }
     { }
-
-    virtual ~TimerEvent() = default;
 
     EventID Type() const { return m_timerEvent; }
 

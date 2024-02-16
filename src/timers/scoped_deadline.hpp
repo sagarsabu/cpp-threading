@@ -5,7 +5,7 @@
 #include "log/logger.hpp"
 #include "timers/timer.hpp"
 
-namespace Sage::Threading
+namespace Sage
 {
 
 struct ScopedDeadline final
@@ -36,4 +36,4 @@ private:
     const TimeMilliSec m_deadline;
 };
 
-} // namespace Sage::Threading
+} // namespace Sage

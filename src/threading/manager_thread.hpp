@@ -5,7 +5,7 @@
 #include <atomic>
 #include <semaphore>
 
-#include "threading/timer.hpp"
+#include "timers/timer.hpp"
 #include "threading/thread.hpp"
 #include "threading/events.hpp"
 
@@ -23,13 +23,13 @@ public:
         WorkerTest
     };
 
-    virtual ~ManagerEvent() = default;
+    virtual ~ManagerEvent() override = default;
 
     Event Type() const { return m_event; }
 
 protected:
-    explicit ManagerEvent(Event eventType) :
-        ThreadEvent{ EventReceiver::ManagerThread },
+    ManagerEvent(Event eventType, EventReceiver receiver) :
+        ThreadEvent{ receiver },
         m_event{ eventType }
     { }
 
@@ -41,7 +41,7 @@ class ManagerTeardownEvent final : public ManagerEvent
 {
 public:
     ManagerTeardownEvent() :
-        ManagerEvent{ Event::TeardownWorkers }
+        ManagerEvent{ Event::TeardownWorkers, EventReceiver::ManagerThread }
     { }
 };
 
@@ -49,7 +49,7 @@ class ManagerWorkerTestEvent final : public ManagerEvent
 {
 public:
     explicit ManagerWorkerTestEvent(const TimeMilliSec& timeout) :
-        ManagerEvent{ Event::WorkerTest },
+        ManagerEvent{ Event::WorkerTest, EventReceiver::WorkerThread },
         m_timeout{ timeout }
     { }
 
@@ -96,11 +96,11 @@ private:
     void HandleEvent(UniqueThreadEvent event) override;
 
 private:
-    std::set<Thread*> m_workers;
-    std::mutex m_workersMtx;
-    std::atomic<bool> m_workersTerminated;
-    std::binary_semaphore m_exitSignal;
-    std::binary_semaphore m_shutdownSignal;
+    std::set<Thread*> m_workers{};
+    std::mutex m_workersMtx{};
+    std::atomic<bool> m_workersTerminated{ false };
+    std::binary_semaphore m_exitSignal{ 0 };
+    std::binary_semaphore m_shutdownSignal{ 0 };
 };
 
 } // namespace Sage::Threading

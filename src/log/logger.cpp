@@ -36,7 +36,7 @@ public:
 class CoutLogStreamer final : public LogStreamer
 {
 public:
-    virtual ~CoutLogStreamer() = default;
+    virtual ~CoutLogStreamer() final = default;
 
     inline CoutLogStreamer& operator<<(const char* log) override
     {
@@ -59,11 +59,7 @@ public:
 class FileLogStreamer final : public LogStreamer
 {
 public:
-    FileLogStreamer() :
-        m_fileStream{ }
-    { }
-
-    virtual ~FileLogStreamer() = default;
+    virtual ~FileLogStreamer() final = default;
 
     /**
      @throws std::exception on failure
@@ -107,7 +103,7 @@ public:
     }
 
 private:
-    std::ofstream m_fileStream;
+    std::ofstream m_fileStream{};
 };
 
 struct LogTimestamp

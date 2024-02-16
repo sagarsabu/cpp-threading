@@ -1,5 +1,4 @@
 #include <chrono>
-#include <memory>
 #include <algorithm>
 
 #include "log/logger.hpp"
@@ -16,12 +15,7 @@ enum ManagerTimerEvent
 };
 
 ManagerThread::ManagerThread() :
-    Thread{ "MngrThread" },
-    m_workers{},
-    m_workersMtx{},
-    m_workersTerminated{ false },
-    m_exitSignal{ 0 },
-    m_shutdownSignal{ 0 }
+    Thread{ "MngrThread" }
 { }
 
 void ManagerThread::AttachWorker(Thread* worker)
