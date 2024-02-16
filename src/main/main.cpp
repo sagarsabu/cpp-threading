@@ -1,63 +1,121 @@
 #include <atomic>
 #include <csignal>
+#include <getopt.h>
+#include <utility>
+#include <iostream>
 
 #include "log/logger.hpp"
-#include "threading/manager_thread.hpp"
-#include "threading/worker_thread.hpp"
 #include "timers/timer.hpp"
 #include "main/exit_handler.hpp"
+#include "threading/manager_thread.hpp"
+#include "threading/worker_thread.hpp"
 
 
 using namespace Sage;
 
 
-Logger::Level GetLogLevel(const std::string_view& logArg)
+auto GetCLiArgs(int argc, char** const argv)
 {
-    Logger::Level level{ Logger::Level::Info };
-    if (logArg == "--trace" or logArg == "-t")
+    static const option argOptions[]
     {
-        level = Logger::Level::Trace;
-    }
-    else if (logArg == "--debug" or logArg == "-d")
+        {"help", no_argument, nullptr, 'h' },
+        {"level", required_argument, nullptr, 'l' },
+        {"file", required_argument, nullptr, 'f' },
+        {0, 0, 0, 0}
+    };
+
+    auto usage = [&argv]
     {
-        level = Logger::Level::Debug;
-    }
-    else if (logArg == "--info" or logArg == "-i")
+        std::string_view progName{ argv[0] };
+        if (size_t pos{ progName.find_last_of('/') }; pos != std::string::npos)
+        {
+            progName = progName.substr(pos + 1);
+        }
+
+        std::cout <<
+            "Usage: " << progName <<
+            "\n\t[optional] --level|-l <t|trace|d|debug|i|info|w|warn|e|error|c|critical>"
+            "\n\t[optional] --file|-f <filename> "
+            "\n\t[optional] --help|-h"
+            << std::endl;
+    };
+
+    auto getLogLevel = [](const std::string_view& logArg)
     {
-        level = Logger::Level::Info;
-    }
-    else if (logArg == "--warn" or logArg == "-w")
+        Logger::Level level{ Logger::Level::Info };
+        if (logArg == "trace" or logArg == "t")
+        {
+            level = Logger::Level::Trace;
+        }
+        else if (logArg == "debug" or logArg == "d")
+        {
+            level = Logger::Level::Debug;
+        }
+        else if (logArg == "info" or logArg == "i")
+        {
+            level = Logger::Level::Info;
+        }
+        else if (logArg == "warn" or logArg == "w")
+        {
+            level = Logger::Level::Warning;
+        }
+        else if (logArg == "error" or logArg == "e")
+        {
+            level = Logger::Level::Error;
+        }
+        else if (logArg == "critical" or logArg == "c")
+        {
+            level = Logger::Level::Critical;
+        }
+
+        return level;
+    };
+
+    Logger::Level logLevel{ Logger::Info };
+    std::optional<std::string> logFile{};
+
+    int option;
+    int optIndex;
+    while ((option = getopt_long(argc, argv, "hl:f:", argOptions, &optIndex)) != -1)
     {
-        level = Logger::Level::Warning;
-    }
-    else if (logArg == "--error" or logArg == "-e")
-    {
-        level = Logger::Level::Error;
-    }
-    else if (logArg == "--critical" or logArg == "-c")
-    {
-        level = Logger::Level::Critical;
+        switch (option)
+        {
+            case 'h':
+                usage();
+                std::exit(0);
+                break;
+
+            case 'l':
+                logLevel = getLogLevel(optarg);
+                break;
+
+            case 'f':
+                logFile = optarg;
+                break;
+
+            case '?':
+            default:
+                usage();
+                std::exit(1);
+                break;
+        }
     }
 
-    return level;
+    return std::make_pair(logLevel, logFile);
 }
 
 
-int main(int argc, const char** argv)
+int main(int argc, char** const argv)
 {
     int res{ 0 };
 
     try
     {
-        Logger::Level level{ Logger::Level::Info };
-        if (argc >= 2)
-        {
-            level = GetLogLevel(argv[1]);
-        }
+        auto [logLevel, logFile] { GetCLiArgs(argc, argv) };
 
         // Setup logging
-        Logger::SetupLogger();
-        Logger::SetLogLevel(level);
+        Logger::SetupLogger(logFile);
+        Logger::SetLogLevel(logLevel);
 
         ExitHandler::Setup();
 
@@ -76,18 +134,18 @@ int main(int argc, const char** argv)
             Log::Info("exit-handle triggered");
             manager.RequestExit();
 
-            PeriodicTimer shutdownTimer(1000ms, []
+            PeriodicTimer shutdownTimer(1s, []
             {
-                constexpr auto shutdownThreshold{ 5000ms };
+                constexpr auto shutdownThreshold{ 5s };
                 static const auto shutdownStart{ Clock::now() };
 
                 auto now = Clock::now();
-                auto duration = std::chrono::duration_cast<TimeMilliSec>(now - shutdownStart);
+                auto duration = std::chrono::duration_cast<TimeMs>(now - shutdownStart);
                 if (duration >= shutdownThreshold)
                 {
                     // Can't be caught so the os kill kill us
                     Log::Critical("shutdown duration exceeded. forcing shutdown");
-                    raise(SIGKILL);
+                    std::raise(SIGKILL);
                 }
                 else
                 {
@@ -114,7 +172,7 @@ int main(int argc, const char** argv)
     }
     catch (...)
     {
-        Log::Critical("caught unknown exception. Shutting down.");
+        Log::Critical("caught unknown exception. shutting down.");
         res = 1;
     }
 
