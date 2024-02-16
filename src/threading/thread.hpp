@@ -91,6 +91,7 @@ private:
 private:
     static constexpr size_t MAX_EVENTS_PER_LOOP{ 10 };
     static constexpr TimeMilliSec PROCESS_EVENTS_THRESHOLD{ 1000ms };
+    static constexpr TimeMilliSec PROCESS_EVENTS_WAIT_TIMEOUT{ 100ms };
 };
 
 } // namespace Sage::Threading

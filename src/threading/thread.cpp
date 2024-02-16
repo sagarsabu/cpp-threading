@@ -168,14 +168,15 @@ int Thread::Execute()
 
 void Thread::ProcessEvents()
 {
-    ScopedDeadline processDeadline{ m_threadName + "@ProcessEvents", PROCESS_EVENTS_THRESHOLD };
-    bool hasEvent{ m_eventSignal.try_acquire_for(PROCESS_EVENTS_THRESHOLD) };
+    bool hasEvent{ m_eventSignal.try_acquire_for(PROCESS_EVENTS_WAIT_TIMEOUT) };
     if (not hasEvent)
     {
         // Timeout
         return;
     }
 
+    // Only start the deadline if the events to process
+    ScopedDeadline processDeadline{ m_threadName + "@ProcessEvents", PROCESS_EVENTS_THRESHOLD };
     size_t eventsQueued{ 0 };
     {
         std::lock_guard lock{ m_eventQueueMtx };

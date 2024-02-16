@@ -55,7 +55,7 @@ Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, con
     }
 
     // setup the timer
-    if (timer_create(CLOCK_REALTIME, &signalEvent, &m_timer) != 0)
+    if (timer_create(CLOCK_MONOTONIC, &signalEvent, &m_timer) != 0)
     {
         Log::Critical("failed to create timer for id:%d. %s", Id(), strerror(errno));
         return;
