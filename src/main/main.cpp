@@ -7,7 +7,41 @@
 #include "timers/timer.hpp"
 #include "main/exit_handler.hpp"
 
+
 using namespace Sage;
+
+
+Logger::Level GetLogLevel(const std::string_view& logArg)
+{
+    Logger::Level level{ Logger::Level::Info };
+    if (logArg == "--trace" or logArg == "-t")
+    {
+        level = Logger::Level::Trace;
+    }
+    else if (logArg == "--debug" or logArg == "-d")
+    {
+        level = Logger::Level::Debug;
+    }
+    else if (logArg == "--info" or logArg == "-i")
+    {
+        level = Logger::Level::Info;
+    }
+    else if (logArg == "--warn" or logArg == "-w")
+    {
+        level = Logger::Level::Warning;
+    }
+    else if (logArg == "--error" or logArg == "-e")
+    {
+        level = Logger::Level::Error;
+    }
+    else if (logArg == "--critical" or logArg == "-c")
+    {
+        level = Logger::Level::Critical;
+    }
+
+    return level;
+}
+
 
 int main(int argc, const char** argv)
 {
@@ -16,9 +50,9 @@ int main(int argc, const char** argv)
     try
     {
         Logger::Level level{ Logger::Level::Info };
-        if (argc >= 2 and (std::string_view{ argv[1] } == "--debug" or std::string_view{ argv[1] } == "-d"))
+        if (argc >= 2)
         {
-            level = Logger::Level::Debug;
+            level = GetLogLevel(argv[1]);
         }
 
         // Setup logging
