@@ -8,7 +8,7 @@
 namespace Sage::Threading
 {
 
-Thread::Thread(const std::string& threadName, const TimeMilliSec& handleEventThreshold) :
+Thread::Thread(const std::string& threadName, const TimeMS& handleEventThreshold) :
     m_threadName{ threadName },
     m_thread{ &Thread::Enter, this },
     m_handleEventThreshold{ handleEventThreshold }
@@ -73,7 +73,7 @@ void Thread::TransmitEvent(UniqueThreadEvent event)
     }
 }
 
-void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeMilliSec period)
+void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeMS period)
 {
     auto itr = m_timerEvents.find(timerEventId);
     if (itr != m_timerEvents.end())
@@ -88,7 +88,7 @@ void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeMilliSec per
     });
 }
 
-void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeMilliSec delta)
+void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeMS delta)
 {
     auto itr = m_timerEvents.find(timerEventId);
     if (itr != m_timerEvents.end())

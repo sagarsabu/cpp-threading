@@ -140,7 +140,7 @@ int main(int argc, char** const argv)
                 static const auto shutdownStart{ Clock::now() };
 
                 auto now = Clock::now();
-                auto duration = std::chrono::duration_cast<TimeMs>(now - shutdownStart);
+                auto duration = std::chrono::duration_cast<TimeMS>(now - shutdownStart);
                 if (duration >= shutdownThreshold)
                 {
                     // Can't be caught so the os kill kill us

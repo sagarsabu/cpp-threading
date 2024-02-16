@@ -23,7 +23,7 @@ using UniqueThreadEvent = std::unique_ptr<ThreadEvent>;
 class Thread
 {
 public:
-    Thread(const std::string& threadName, const TimeMilliSec& handleEventThreshold = 20ms);
+    Thread(const std::string& threadName, const TimeMS& handleEventThreshold = 20ms);
 
     virtual ~Thread();
 
@@ -46,9 +46,9 @@ protected:
 
     virtual void HandleEvent(UniqueThreadEvent event);
 
-    void AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeMilliSec period);
+    void AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeMS period);
 
-    void AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeMilliSec delta);
+    void AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeMS delta);
 
     void RemoveTimer(TimerEvent::EventID timerEventId);
 
@@ -86,12 +86,12 @@ private:
     std::atomic<bool> m_stopping{ false };
     std::unique_ptr<FireOnceTimer> m_stopTimer{ nullptr };
     std::unordered_map<TimerEvent::EventID, std::unique_ptr<Timer>> m_timerEvents{};
-    const TimeMilliSec m_handleEventThreshold;
+    const TimeMS m_handleEventThreshold;
 
 private:
     static constexpr size_t MAX_EVENTS_PER_LOOP{ 10 };
-    static constexpr TimeMilliSec PROCESS_EVENTS_THRESHOLD{ 1000ms };
-    static constexpr TimeMilliSec PROCESS_EVENTS_WAIT_TIMEOUT{ 100ms };
+    static constexpr TimeMS PROCESS_EVENTS_THRESHOLD{ 1000ms };
+    static constexpr TimeMS PROCESS_EVENTS_WAIT_TIMEOUT{ 100ms };
 };
 
 } // namespace Sage::Threading

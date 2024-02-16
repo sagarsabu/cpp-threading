@@ -19,8 +19,8 @@ inline uint GetNextTimerID()
 
 // Base timer
 
-Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback&& callback) :
-    m_timerInterval{ .it_interval = MilliSecsToTimeSpec(periodMS), .it_value = MilliSecsToTimeSpec(startDeltaMS) },
+Timer::Timer(const TimeNS& startDelta, const TimeNS& period, const TimerCallback&& callback) :
+    m_timerInterval{ .it_interval = NanoSecsToTimeSpec(period), .it_value = NanoSecsToTimeSpec(startDelta) },
     m_signalData{ .m_callback = std::move(callback), .m_timerId = GetNextTimerID() }
 {
     Log::Debug("c'tor timer with id:%d", Id());
@@ -93,21 +93,21 @@ void Timer::Stop() const
 // Fire once timer
 
 FireOnceTimer::FireOnceTimer() :
-    Timer{ 0ms, 0ms, [] { } }
+    Timer{ 0ns, 0ns, [] { } }
 { }
 
-FireOnceTimer::FireOnceTimer(const TimeMilliSec& deltaMS, const TimerCallback&& callback) :
-    Timer{ deltaMS, 0ms, std::move(callback) }
+FireOnceTimer::FireOnceTimer(const TimeNS& delta, const TimerCallback&& callback) :
+    Timer{ delta, 0ns, std::move(callback) }
 { }
 
 // Periodic timer
 
 PeriodicTimer::PeriodicTimer() :
-    Timer{ 0ms, 0ms, [] { } }
+    Timer{ 0ns, 0ns, [] { } }
 { }
 
-PeriodicTimer::PeriodicTimer(const TimeMilliSec& periodMS, const TimerCallback&& callback) :
-    Timer{ periodMS, periodMS, std::move(callback) }
+PeriodicTimer::PeriodicTimer(const TimeNS& period, const TimerCallback&& callback) :
+    Timer{ period, period, std::move(callback) }
 { }
 
 } // namespace Sage

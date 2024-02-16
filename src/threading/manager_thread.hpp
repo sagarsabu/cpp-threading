@@ -48,12 +48,12 @@ public:
 class ManagerWorkerTestEvent final : public ManagerEvent
 {
 public:
-    explicit ManagerWorkerTestEvent(const TimeMilliSec& timeout) :
+    explicit ManagerWorkerTestEvent(const TimeMS& timeout) :
         ManagerEvent{ Event::WorkerTest, EventReceiver::WorkerThread },
         m_timeout{ timeout }
     { }
 
-    TimeMilliSec m_timeout;
+    TimeMS m_timeout;
 };
 
 // Manager thread
@@ -61,9 +61,9 @@ public:
 class ManagerThread final : public Thread
 {
 public:
-    static constexpr inline TimeMilliSec TEARDOWN_THRESHOLD{ 1000ms };
-    static constexpr inline TimeMilliSec TEST_TIMEOUT{ 10ms };
-    static constexpr inline TimeMilliSec TRANSMIT_PERIOD{ 15ms };
+    static constexpr inline TimeMS TEARDOWN_THRESHOLD{ 1000ms };
+    static constexpr inline TimeMS TEST_TIMEOUT{ 10ms };
+    static constexpr inline TimeMS TRANSMIT_PERIOD{ 15ms };
 
 public:
     ManagerThread();

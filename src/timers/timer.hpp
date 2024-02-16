@@ -14,16 +14,17 @@ using namespace std::chrono_literals;
 // Useful aliases
 
 using Clock = std::chrono::high_resolution_clock;
-using TimeMilliSec = std::chrono::milliseconds;
-using TimeNanoSec = std::chrono::nanoseconds;
-using TimeSec = std::chrono::seconds;
+using TimeNS = std::chrono::nanoseconds;
+using TimeUS = std::chrono::microseconds;
+using TimeMS = std::chrono::milliseconds;
+using TimeS = std::chrono::seconds;
 
 // Helpers
 
-constexpr timespec MilliSecsToTimeSpec(const TimeMilliSec& duration)
+constexpr timespec NanoSecsToTimeSpec(const TimeNS& duration)
 {
-    const TimeSec& seconds = std::chrono::duration_cast<TimeSec>(duration);
-    const TimeNanoSec& nanoSecs = std::chrono::duration_cast<TimeNanoSec>(duration);
+    const TimeS& seconds = std::chrono::duration_cast<TimeS>(duration);
+    const TimeNS& nanoSecs = duration;
     return timespec{ seconds.count(), (nanoSecs - seconds).count() };
 }
 
@@ -43,7 +44,7 @@ public:
     uint Id() const { return m_signalData.m_timerId; };
 
 protected:
-    Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback&& callback);
+    Timer(const TimeNS& startDelta, const TimeNS& period, const TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -77,7 +78,7 @@ class FireOnceTimer final : public Timer
 public:
     FireOnceTimer();
 
-    FireOnceTimer(const TimeMilliSec& deltaMS, const TimerCallback&& callback);
+    FireOnceTimer(const TimeNS& delta, const TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -94,7 +95,7 @@ class PeriodicTimer final : public Timer
 public:
     PeriodicTimer();
 
-    PeriodicTimer(const TimeMilliSec& periodMS, const TimerCallback&& callback);
+    PeriodicTimer(const TimeNS& period, const TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable

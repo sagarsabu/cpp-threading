@@ -63,7 +63,7 @@ void ManagerThread::TryWaitForWorkersShutdown()
     {
         std::this_thread::sleep_for(20ms);
         auto now = Clock::now();
-        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - workerTeardownStart);
+        auto duration = std::chrono::duration_cast<TimeMS>(now - workerTeardownStart);
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
@@ -86,7 +86,7 @@ void ManagerThread::TryWaitForManagerShutdown()
     {
         std::this_thread::sleep_for(20ms);
         auto now = Clock::now();
-        auto duration = std::chrono::duration_cast<TimeMilliSec>(now - managerTeardownStart);
+        auto duration = std::chrono::duration_cast<TimeMS>(now - managerTeardownStart);
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
