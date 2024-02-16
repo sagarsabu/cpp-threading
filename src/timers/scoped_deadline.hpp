@@ -3,7 +3,7 @@
 #include <chrono>
 
 #include "log/logger.hpp"
-#include "threading/timer.hpp"
+#include "timers/timer.hpp"
 
 namespace Sage::Threading
 {
@@ -11,7 +11,6 @@ namespace Sage::Threading
 struct ScopedDeadline final
 {
     ScopedDeadline(const std::string& tag, const TimeMilliSec& deadline) :
-        m_start{ Clock::now() },
         m_tag{ tag },
         m_deadline{ deadline }
     { }
@@ -32,7 +31,7 @@ struct ScopedDeadline final
     }
 
 private:
-    const Clock::time_point m_start;
+    const Clock::time_point m_start{ Clock::now() };
     const std::string m_tag;
     const TimeMilliSec m_deadline;
 };

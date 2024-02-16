@@ -1,10 +1,10 @@
-#include <chrono>
-#include <cstring>
 #include <csignal>
+#include <cstring>
 
-#include "threading/timer.hpp"
+#include "log/logger.hpp"
+#include "timers/timer.hpp"
 
-namespace Sage::Threading
+namespace Sage
 {
 
 inline uint GetNextTimerID()
@@ -19,13 +19,9 @@ inline uint GetNextTimerID()
 
 // Base timer
 
-Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback& callback) :
-    m_timer{},
-    m_timerInterval{
-        .it_interval = MilliSecsToTimeSpec(periodMS),
-        .it_value = MilliSecsToTimeSpec(startDeltaMS)
-    },
-    m_signalData{ .m_callback = callback, .m_timerId = GetNextTimerID() }
+Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback&& callback) :
+    m_timerInterval{ .it_interval = MilliSecsToTimeSpec(periodMS), .it_value = MilliSecsToTimeSpec(startDeltaMS) },
+    m_signalData{ .m_callback = std::move(callback), .m_timerId = GetNextTimerID() }
 {
     Log::Debug("c'tor timer with id:%d", Id());
 
@@ -59,7 +55,7 @@ Timer::Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, con
     }
 
     // setup the timer
-    if (timer_create(CLOCK_MONOTONIC, &signalEvent, &m_timer) != 0)
+    if (timer_create(CLOCK_REALTIME, &signalEvent, &m_timer) != 0)
     {
         Log::Critical("failed to create timer for id:%d. %s", Id(), strerror(errno));
         return;
@@ -100,8 +96,8 @@ FireOnceTimer::FireOnceTimer() :
     Timer{ 0ms, 0ms, [] { } }
 { }
 
-FireOnceTimer::FireOnceTimer(const TimeMilliSec& deltaMS, const TimerCallback& callback) :
-    Timer{ deltaMS, 0ms, callback }
+FireOnceTimer::FireOnceTimer(const TimeMilliSec& deltaMS, const TimerCallback&& callback) :
+    Timer{ deltaMS, 0ms, std::move(callback) }
 { }
 
 // Periodic timer
@@ -110,9 +106,9 @@ PeriodicTimer::PeriodicTimer() :
     Timer{ 0ms, 0ms, [] { } }
 { }
 
-PeriodicTimer::PeriodicTimer(const TimeMilliSec& periodMS, const TimerCallback& callback) :
-    Timer{ periodMS, periodMS, callback }
+PeriodicTimer::PeriodicTimer(const TimeMilliSec& periodMS, const TimerCallback&& callback) :
+    Timer{ periodMS, periodMS, std::move(callback) }
 { }
 
-} // namespace Sage::Threading
+} // namespace Sage
 

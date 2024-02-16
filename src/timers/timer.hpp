@@ -4,10 +4,10 @@
 #include <functional>
 #include <chrono>
 
-#include "log/logger.hpp"
 
-namespace Sage::Threading
+namespace Sage
 {
+
 // Makes life easier
 using namespace std::chrono_literals;
 
@@ -43,7 +43,7 @@ public:
     uint Id() const { return m_signalData.m_timerId; };
 
 protected:
-    Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback& callback);
+    Timer(const TimeMilliSec& startDeltaMS, const TimeMilliSec& periodMS, const TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -59,7 +59,7 @@ private:
     };
 
 private:
-    timer_t m_timer;
+    timer_t m_timer{};
     const itimerspec m_timerInterval;
     const SigValData m_signalData;
 
@@ -77,7 +77,7 @@ class FireOnceTimer final : public Timer
 public:
     FireOnceTimer();
 
-    FireOnceTimer(const TimeMilliSec& deltaMS, const TimerCallback& callback);
+    FireOnceTimer(const TimeMilliSec& deltaMS, const TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -85,7 +85,6 @@ private:
     FireOnceTimer(FireOnceTimer&&) = delete;
     FireOnceTimer& operator=(const FireOnceTimer&) = delete;
     FireOnceTimer& operator=(FireOnceTimer&&) = delete;
-
 };
 
 // Periodic timer
@@ -95,7 +94,7 @@ class PeriodicTimer final : public Timer
 public:
     PeriodicTimer();
 
-    PeriodicTimer(const TimeMilliSec& periodMS, const TimerCallback& callback);
+    PeriodicTimer(const TimeMilliSec& periodMS, const TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -103,7 +102,6 @@ private:
     PeriodicTimer(PeriodicTimer&&) = delete;
     PeriodicTimer& operator=(const PeriodicTimer&) = delete;
     PeriodicTimer& operator=(PeriodicTimer&&) = delete;
-
 };
 
-} // namespace Sage::Threading
+} // namespace Sage
