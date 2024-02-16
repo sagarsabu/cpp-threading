@@ -30,5 +30,4 @@ $(BUILD_DIR): CMakeLists.txt
 		-DCMAKE_C_COMPILER:FILEPATH=$(CC) \
 		-DCMAKE_CXX_COMPILER:FILEPATH=$(CXX) \
 		-S $(CURDIR) \
-		-B $(BUILD_DIR) \
-		-G "Unix Makefiles"
+		-B $(BUILD_DIR)
