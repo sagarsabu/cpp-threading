@@ -19,7 +19,7 @@ class ManagerEvent : public ThreadEvent
 public:
     enum Event
     {
-        TeardownWorkers,
+        Shutdown,
         WorkerTest
     };
 
@@ -37,11 +37,11 @@ private:
     const Event m_event;
 };
 
-class ManagerTeardownEvent final : public ManagerEvent
+class ManagerShutdownEvent final : public ManagerEvent
 {
 public:
-    ManagerTeardownEvent() :
-        ManagerEvent{ Event::TeardownWorkers, EventReceiver::ManagerThread }
+    ManagerShutdownEvent() :
+        ManagerEvent{ Event::Shutdown, EventReceiver::ManagerThread }
     { }
 };
 
@@ -70,9 +70,7 @@ public:
 
     void AttachWorker(Thread* worker);
 
-    void RequestExit();
-
-    void WaitForExit();
+    void RequestShutdown();
 
     void WaitForShutdown();
 
@@ -85,13 +83,11 @@ private:
 
     void TryWaitForManagerShutdown();
 
-    void RequestShutdown();
+    void InitiateShutdown();
 
     bool WorkersRunning();
 
     void Starting() override;
-
-    void Stopping() override;
 
     void HandleEvent(UniqueThreadEvent event) override;
 
@@ -99,8 +95,8 @@ private:
     std::set<Thread*> m_workers{};
     std::mutex m_workersMtx{};
     std::atomic<bool> m_workersTerminated{ false };
-    std::binary_semaphore m_exitSignal{ 0 };
-    std::binary_semaphore m_shutdownSignal{ 0 };
+    std::binary_semaphore m_shutdownInitiateSignal{ 0 };
+    std::binary_semaphore m_shutdownInitiatedSignal{ 0 };
 };
 
 } // namespace Sage::Threading

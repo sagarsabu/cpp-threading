@@ -6,10 +6,10 @@ CORES=$(shell nproc)
 BUILD_DIR=$(CURDIR)/build
 BIN_DIR=$(CURDIR)/bin
 
-ifdef DEBUG
-BUILD_MODE=Debug
-else
+ifdef RELEASE
 BUILD_MODE=Release
+else
+BUILD_MODE=Debug
 endif
 
 all: $(BUILD_DIR)
@@ -17,7 +17,7 @@ all: $(BUILD_DIR)
 	@+$(CMAKE) --build $(BUILD_DIR) --config $(BUILD_MODE) --target all  -j$(CORES) --
 
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf $(BIN_DIR) $(BUILD_DIR)
 
 clean-cmake:
 	rm -rf $(BUILD_DIR)

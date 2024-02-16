@@ -60,44 +60,46 @@ void Thread::Stop()
 
 void Thread::TransmitEvent(UniqueThreadEvent event)
 {
-    if (not m_stopping)
-    {
-        std::lock_guard lock{ m_eventQueueMtx };
-        m_eventQueue.emplace(std::move(event));
-        m_eventSignal.release();
-    }
-    else
+    if (m_stopping)
     {
         Log::Critical("%s transmit-event dropped event for receiver:%s",
             Name(), event->ReceiverName());
+        return;
     }
+
+    {
+        std::lock_guard lock{ m_eventQueueMtx };
+        m_eventQueue.emplace(std::move(event));
+    }
+
+    m_eventSignal.release();
 }
 
-void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeMS period)
+void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
 {
-    auto itr = m_timerEvents.find(timerEventId);
-    if (itr != m_timerEvents.end())
+    auto itr = m_timers.find(timerEventId);
+    if (itr != m_timers.end())
     {
         Log::Error("%s add-periodic-timer timer-event-id:%d already exists", Name(), timerEventId);
         return;
     }
 
-    m_timerEvents[timerEventId] = std::make_unique<PeriodicTimer>(period, [this, timerEventId]
+    m_timers[timerEventId] = std::make_unique<PeriodicTimer>(period, [this, timerEventId]
     {
         TransmitEvent(std::make_unique<TimerEvent>(timerEventId));
     });
 }
 
-void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeMS delta)
+void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta)
 {
-    auto itr = m_timerEvents.find(timerEventId);
-    if (itr != m_timerEvents.end())
+    auto itr = m_timers.find(timerEventId);
+    if (itr != m_timers.end())
     {
         Log::Error("%s add-fire-once-timer timer-event-id:%d already exists", Name(), timerEventId);
         return;
     }
 
-    m_timerEvents[timerEventId] = std::make_unique<FireOnceTimer>(delta, [this, timerEventId]
+    m_timers[timerEventId] = std::make_unique<FireOnceTimer>(delta, [this, timerEventId]
     {
         TransmitEvent(std::make_unique<TimerEvent>(timerEventId));
     });
@@ -105,42 +107,40 @@ void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeMS delta)
 
 void Thread::RemoveTimer(TimerEvent::EventID timerEventId)
 {
-    auto itr = m_timerEvents.find(timerEventId);
-    if (itr == m_timerEvents.end())
+    auto itr = m_timers.find(timerEventId);
+    if (itr == m_timers.end())
     {
         Log::Error("%s remove-timer timer-event-id:%d does not exist", Name(), timerEventId);
         return;
     }
 
-    m_timerEvents.erase(itr);
+    m_timers.erase(itr);
 }
 
 void Thread::StartTimer(TimerEvent::EventID timerEventId) const
 {
-    auto itr = m_timerEvents.find(timerEventId);
-    if (itr != m_timerEvents.end())
-    {
-        Log::Debug("%s start-timer timer-event-id:%d timer-id:%d", Name(), timerEventId, itr->second->Id());
-        itr->second->Start();
-    }
-    else
+    auto itr = m_timers.find(timerEventId);
+    if (itr == m_timers.end())
     {
         Log::Error("%s start-timer timer-event-id:%d does not exist", Name(), timerEventId);
+        return;
     }
+
+    Log::Debug("%s start-timer timer-event-id:%d timer-id:%d", Name(), timerEventId, itr->second->Id());
+    itr->second->Start();
 }
 
 void Thread::StopTimer(TimerEvent::EventID timerEventId) const
 {
-    auto itr = m_timerEvents.find(timerEventId);
-    if (itr != m_timerEvents.end())
-    {
-        Log::Debug("%s stop-timer timer-event-id:%d timer-id:%d", Name(), timerEventId, itr->second->Id());
-        itr->second->Stop();
-    }
-    else
+    auto itr = m_timers.find(timerEventId);
+    if (itr == m_timers.end())
     {
         Log::Error("%s stop-timer timer-event-id:%d does not exist", Name(), timerEventId);
+        return;
     }
+
+    Log::Debug("%s stop-timer timer-event-id:%d timer-id:%d", Name(), timerEventId, itr->second->Id());
+    itr->second->Stop();
 }
 
 
@@ -232,12 +232,6 @@ void Thread::ProcessEvents()
     {
         Log::Trace("%s process-events n-received-events:%ld", Name(), eventsForThisLoop);
     }
-}
-
-void Thread::HandleEvent(UniqueThreadEvent event)
-{
-    Log::Warning("%s default handle-event discarding event for receiver:%s",
-        Name(), event->ReceiverName());
 }
 
 void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)

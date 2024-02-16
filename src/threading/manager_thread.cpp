@@ -24,33 +24,29 @@ void ManagerThread::AttachWorker(Thread* worker)
     m_workers.emplace(worker);
 }
 
-void  ManagerThread::RequestExit()
+void  ManagerThread::RequestShutdown()
 {
-    Log::Info("exit requested for '%s'", Name());
-    m_exitSignal.release();
+    Log::Info("shutdown requested for '%s'", Name());
+    m_shutdownInitiateSignal.release();
 }
 
-void ManagerThread::WaitForExit()
-{
-    Log::Info("waiting for exit '%s' request ...", Name());
-    m_exitSignal.acquire();
-    Log::Info("wait-for-exit '%s' triggered ...", Name());
-
-    TransmitEvent(std::make_unique<ManagerTeardownEvent>());
-}
-
+// Called from main thread
 void ManagerThread::WaitForShutdown()
 {
-    Log::Info("waiting for shutdown '%s' request ...", Name());
-    m_shutdownSignal.acquire();
-    Log::Info("wait-for-shutdown '%s' triggered ...", Name());
+    Log::Info("waiting for shutdown initiate signal for '%s'", Name());
+    m_shutdownInitiateSignal.acquire();
+    Log::Info("shutdown initiate signal for '%s' acquired", Name());
 
-    TeardownWorkers();
-    TryWaitForWorkersShutdown();
+    TransmitEvent(std::make_unique<ManagerShutdownEvent>());
 
-    // Initiate a stop request
+    Log::Info("waiting for shutdown initiated signal for '%s'", Name());
+    m_shutdownInitiatedSignal.acquire();
+    Log::Info("shutdown initiated signal for '%s' acquired", Name());
+
+    // Initiate a stop request for the manager thread
     Stop();
 
+    TryWaitForWorkersShutdown();
     TryWaitForManagerShutdown();
 }
 
@@ -143,10 +139,14 @@ void ManagerThread::TeardownWorkers()
     Log::Info("%s stop requested for all workers", Name());
 }
 
-void  ManagerThread::RequestShutdown()
+void  ManagerThread::InitiateShutdown()
 {
-    Log::Info("%s shutdown requested", Name());
-    m_shutdownSignal.release();
+    Log::Info("%s initiating shutdown", Name());
+
+    TeardownWorkers();
+    m_shutdownInitiatedSignal.release();
+
+    Log::Info("%s initiated shutdown", Name());
 }
 
 bool ManagerThread::WorkersRunning()
@@ -163,17 +163,10 @@ bool ManagerThread::WorkersRunning()
 
 void ManagerThread::Starting()
 {
-    Log::Info("%s starting ...", Name());
-
     Log::Info("%s setting up periodic timer for self transmitting", Name());
 
     AddPeriodicTimer(ManagerTimerEvent::TransmitWork, TRANSMIT_PERIOD);
     StartTimer(ManagerTimerEvent::TransmitWork);
-}
-
-void ManagerThread::Stopping()
-{
-    Log::Info("%s stopping ...", Name());
 }
 
 void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
@@ -207,9 +200,9 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
             auto& event = static_cast<ManagerEvent&>(*threadEvent);
             switch (event.Type())
             {
-                case ManagerEvent::TeardownWorkers:
+                case ManagerEvent::Shutdown:
                 {
-                    RequestShutdown();
+                    InitiateShutdown();
                     break;
                 }
 

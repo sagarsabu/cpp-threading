@@ -44,11 +44,11 @@ protected:
 
     virtual void Stopping() { }
 
-    virtual void HandleEvent(UniqueThreadEvent event);
+    virtual void HandleEvent(UniqueThreadEvent event) = 0;
 
-    void AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeMS period);
+    void AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period);
 
-    void AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeMS delta);
+    void AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta);
 
     void RemoveTimer(TimerEvent::EventID timerEventId);
 
@@ -85,7 +85,7 @@ private:
     std::atomic<bool> m_running{ false };
     std::atomic<bool> m_stopping{ false };
     std::unique_ptr<FireOnceTimer> m_stopTimer{ nullptr };
-    std::unordered_map<TimerEvent::EventID, std::unique_ptr<Timer>> m_timerEvents{};
+    std::unordered_map<TimerEvent::EventID, std::unique_ptr<Timer>> m_timers{};
     const TimeMS m_handleEventThreshold;
 
 private:

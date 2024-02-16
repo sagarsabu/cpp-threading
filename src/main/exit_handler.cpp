@@ -4,75 +4,98 @@
 
 #include "main/exit_handler.hpp"
 #include "log/logger.hpp"
-
+#include "timers/timer.hpp"
 
 namespace Sage::ExitHandler
 {
 
-sigset_t g_signalsToBlock{};
-
-void Setup()
+void CreateHandler(const ExitHandle&& theExitHandle)
 {
-    // This runs in the main thread so these signals are blocked for all threads
-    // Ensures setup is only triggered once
-    static auto initialized = []
+    sigset_t signalsToBlock{};
+    sigemptyset(&signalsToBlock);
+
+    const std::array exitSignals{ SIGINT, SIGQUIT, SIGHUP, SIGTERM };
+    for (auto sig : exitSignals)
     {
-        sigemptyset(&g_signalsToBlock);
-
-        const std::array sigsToBlock{ SIGINT, SIGQUIT, SIGHUP, SIGTERM };
-        for (auto sig : sigsToBlock)
-        {
-            sigaddset(&g_signalsToBlock, sig);
-        }
-
-        if (pthread_sigmask(SIG_BLOCK, &g_signalsToBlock, nullptr) != 0)
-        {
-            Log::Error("failed to block exit signals. e: %s", strerror(errno));
-        }
-        else
-        {
-            Log::Info("successfully blocked exit signals");
-        }
-
-        return 0;
-    }();
-    (void) initialized;
-}
-
-void WaitForExit(const ExitHandlerCallBack&& theExitHandle)
-{
-    ExitHandlerCallBack exitHandle{ theExitHandle };
-    int receivedSignal{ 0 };
-
-    while (true)
-    {
-        if (sigwait(&g_signalsToBlock, &receivedSignal) != 0)
-        {
-            Log::Error("sigwait failed when waiting for exit. e: %s", strerror(errno));
-            continue;
-        }
-
-        switch (receivedSignal)
-        {
-            case SIGINT:
-            case SIGQUIT:
-            case SIGHUP:
-            case SIGTERM:
-            {
-                Log::Info("exit-handler received signal '%s'. triggering exit-handle.", strsignal(receivedSignal));
-                exitHandle();
-                return;
-            }
-
-            default:
-            {
-                Log::Error("got unexpected signal:%d", receivedSignal);
-                break;
-            }
-        }
+        sigaddset(&signalsToBlock, sig);
     }
 
+    if (pthread_sigmask(SIG_BLOCK, &signalsToBlock, nullptr) != 0)
+    {
+        Log::Critical("failed to block exit signals. e: %s", strerror(errno));
+    }
+    else
+    {
+        Log::Info("successfully blocked exit signals");
+    }
 
+    std::thread([exitHandle = std::move(theExitHandle), signalsToBlock = std::move(signalsToBlock)]
+    {
+        pthread_setname_np(pthread_self(), "ExitHandler");
+
+        int receivedSignal{ 0 };
+        bool triggered{ false };
+
+        constexpr auto shutdownThreshold{ 5s };
+        constexpr auto shutdownTick{ 500ms };
+        PeriodicTimer shutdownTimer(shutdownTick, [&]
+        {
+            static const auto shutdownStart{ Clock::now() - shutdownTick };
+
+            auto now = Clock::now();
+            auto duration = std::chrono::duration_cast<TimeMS>(now - shutdownStart);
+            if (duration >= shutdownThreshold)
+            {
+                // Can't be caught so the os will kill us
+                Log::Critical("shutdown duration exceeded. forcing shutdown");
+                std::raise(SIGKILL);
+            }
+            else
+            {
+                Log::Warning("shutdown duration at %ld ms", duration.count());
+            }
+        });
+
+        Log::Info("exit-handler waiting for exit signal");
+
+        while (true)
+        {
+            if (sigwait(&signalsToBlock, &receivedSignal) != 0)
+            {
+                Log::Critical("sigwait failed when waiting for exit. e: %s", strerror(errno));
+                continue;
+            }
+
+            switch (receivedSignal)
+            {
+                case SIGINT:
+                case SIGQUIT:
+                case SIGHUP:
+                case SIGTERM:
+                {
+                    if (not triggered)
+                    {
+                        triggered = true;
+                        Log::Info("exit-handler received signal '%s'. triggering exit-handle.", strsignal(receivedSignal));
+                        shutdownTimer.Start();
+                    }
+                    else
+                    {
+                        Log::Critical("exit-handler received additional signal '%s'. triggering exit-handle again.", strsignal(receivedSignal));
+                    }
+
+                    exitHandle();
+                    break;
+                }
+
+                default:
+                {
+                    Log::Critical("got unexpected signal:%d", receivedSignal);
+                    break;
+                }
+            }
+        }
+    }).detach();
 }
 
 } // namespace Sage::ExitHandler

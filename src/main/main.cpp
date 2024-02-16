@@ -10,9 +10,7 @@
 #include "threading/manager_thread.hpp"
 #include "threading/worker_thread.hpp"
 
-
 using namespace Sage;
-
 
 auto GetCLiArgs(int argc, char** const argv)
 {
@@ -117,9 +115,18 @@ int main(int argc, char** const argv)
         Logger::SetupLogger(logFile);
         Logger::SetLogLevel(logLevel);
 
-        ExitHandler::Setup();
+        Threading::ManagerThread* managerPtr{ nullptr };
+        ExitHandler::CreateHandler([&managerPtr]
+        {
+            Log::Info("exit-handle triggered");
+            if (managerPtr != nullptr)
+            {
+                managerPtr->RequestShutdown();
+            }
+        });
 
         Threading::ManagerThread manager;
+        managerPtr = &manager;
         manager.Start();
 
         std::array<Threading::WorkerThread, 2> workers;
@@ -129,41 +136,9 @@ int main(int argc, char** const argv)
             manager.AttachWorker(&worker);
         }
 
-        ExitHandler::WaitForExit([&]
-        {
-            Log::Info("exit-handle triggered");
-            manager.RequestExit();
-
-            PeriodicTimer shutdownTimer(1s, []
-            {
-                constexpr auto shutdownThreshold{ 5s };
-                static const auto shutdownStart{ Clock::now() };
-
-                auto now = Clock::now();
-                auto duration = std::chrono::duration_cast<TimeMS>(now - shutdownStart);
-                if (duration >= shutdownThreshold)
-                {
-                    // Can't be caught so the os kill kill us
-                    Log::Critical("shutdown duration exceeded. forcing shutdown");
-                    std::raise(SIGKILL);
-                }
-                else
-                {
-                    Log::Warning("shutdown duration at %ld ms", duration.count());
-                }
-            });
-
-            Log::Info("exit-handle starting shutdown timer");
-            shutdownTimer.Start();
-
-            // Make sure main thread waits until exit is requested
-            manager.WaitForExit();
-            // Make sure main thread waits until shutdown is complete
-            manager.WaitForShutdown();
-
-            res = manager.ExitCode();
-
-        });
+        // Make sure main thread waits until shutdown is complete
+        manager.WaitForShutdown();
+        res = manager.ExitCode();
     }
     catch (const std::exception& e)
     {

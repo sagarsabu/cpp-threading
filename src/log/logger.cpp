@@ -9,7 +9,6 @@
 #include <unordered_map>
 #include <fstream>
 #include <filesystem>
-#include <atomic>
 
 #include "log/logger.hpp"
 
@@ -206,7 +205,7 @@ FileLogStreamer g_fileStreamer;
 CoutLogStreamer g_coutLogStreamer;
 
 // Default to cout streamer
-std::atomic<LogStreamer*> g_logStreamer{ &g_coutLogStreamer };
+LogStreamer* g_logStreamer{ &g_coutLogStreamer };
 
 // Functions
 

@@ -1,14 +1,13 @@
 #pragma once
 
+#include <thread>
 #include <functional>
 
 namespace Sage::ExitHandler
 {
 
-using ExitHandlerCallBack = std::function<void()>;
+using ExitHandle = std::function<void()>;
 
-void Setup();
-
-void WaitForExit(const ExitHandlerCallBack&& theExitHandle);
+void CreateHandler(const ExitHandle&& theExitHandle);
 
 } // namespace Sage::ExitHandler
