@@ -43,14 +43,11 @@ enum Level
     Critical
 };
 
-constexpr bool operator<(Level lhs, Level rhs)
-{
-    return (static_cast<uint8_t>(lhs) < static_cast<uint8_t>(rhs));
-}
-
 void SetLogLevel(Level logLevel);
 
-void SetupLogger(std::optional<std::string> filename = {});
+void SetupLogger(const std::string& filename = "");
+
+std::string LogFriendlyGetThreadName();
 
 } // namespace Logger
 

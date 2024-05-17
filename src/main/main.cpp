@@ -38,7 +38,7 @@ auto GetCLiArgs(int argc, char** const argv)
             << std::endl;
     };
 
-    auto getLogLevel = [](const std::string_view& logArg)
+    auto getLogLevel = [](std::string_view logArg)
     {
         Logger::Level level{ Logger::Level::Info };
         if (logArg == "trace" or logArg == "t")
@@ -70,7 +70,7 @@ auto GetCLiArgs(int argc, char** const argv)
     };
 
     Logger::Level logLevel{ Logger::Info };
-    std::optional<std::string> logFile{};
+    std::string logFile;
 
     int option;
     int optIndex;
@@ -115,8 +115,10 @@ int main(int argc, char** const argv)
         Logger::SetupLogger(logFile);
         Logger::SetLogLevel(logLevel);
 
+        Log::Info("==== starting ====");
+
         Threading::ManagerThread* managerPtr{ nullptr };
-        ExitHandler::CreateHandler([&managerPtr]
+        ExitHandler::AttachExitHandler([&managerPtr]
         {
             Log::Info("exit-handle triggered");
             if (managerPtr != nullptr)
@@ -127,6 +129,8 @@ int main(int argc, char** const argv)
 
         Threading::ManagerThread manager;
         managerPtr = &manager;
+
+        manager.SetTransmitPeriod(20ms);
         manager.Start();
 
         std::array<Threading::WorkerThread, 2> workers;
@@ -151,6 +155,6 @@ int main(int argc, char** const argv)
         res = 1;
     }
 
-    Log::Info("terminating with return-code:%d", res);
+    Log::Info("==== terminating with return-code:%d ====", res);
     return res;
 }

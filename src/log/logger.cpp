@@ -11,6 +11,7 @@
 #include <filesystem>
 
 #include "log/logger.hpp"
+#include "timers/timer.hpp"
 
 namespace Sage
 {
@@ -18,91 +19,176 @@ namespace Sage
 namespace Logger
 {
 
-// Helper classes / structs
+// Formatter control
 
-// TODO: Find a way to do this by avoiding vtables
+constexpr char FORMAT_END[] = "\x1B[00m";
+constexpr char FORMAT_BOLD[] = "\x1B[01m";
+constexpr char FORMAT_DISABLED[] = "\x1B[02m";
+constexpr char FORMAT_ITALIC[] = "\x1B[03m";
+constexpr char FORMAT_URL[] = "\x1B[04m";
+constexpr char FORMAT_BLINK[] = "\x1B[05m";
+constexpr char FORMAT_BLINK2[] = "\x1B[06m";
+constexpr char FORMAT_SELECTED[] = "\x1B[07m";
+constexpr char FORMAT_INVISIBLE[] = "\x1B[08m";
+constexpr char FORMAT_STRIKE[] = "\x1B[09m";
+constexpr char FORMAT_DOUBLE_UNDERLINE[] = "\x1B[21m";
+
+// Dark Colours
+
+constexpr char DARK_BLACK[] = "\x1B[30m";
+constexpr char DARK_RED[] = "\x1B[31m";
+constexpr char DARK_GREEN[] = "\x1B[32m";
+constexpr char DARK_YELLOW[] = "\x1B[33m";
+constexpr char DARK_BLUE[] = "\x1B[34m";
+constexpr char DARK_VIOLET[] = "\x1B[35m";
+constexpr char DARK_BEIGE[] = "\x1B[36m";
+constexpr char DARK_WHITE[] = "\x1B[37m";
+
+// Light Colours
+
+constexpr char LIGHT_GREY[] = "\x1B[90m";
+constexpr char LIGHT_RED[] = "\x1B[91m";
+constexpr char LIGHT_GREEN[] = "\x1B[92m";
+constexpr char LIGHT_YELLOW[] = "\x1B[93m";
+constexpr char LIGHT_BLUE[] = "\x1B[94m";
+constexpr char LIGHT_VIOLET[] = "\x1B[95m";
+constexpr char LIGHT_BEIGE[] = "\x1B[96m";
+constexpr char LIGHT_WHITE[] = "\x1B[97m";
+
+// Helper classes / structs
 
 class LogStreamer
 {
 public:
-    virtual ~LogStreamer() = default;
+    using Stream = std::basic_ostream<char>;
 
-    virtual inline LogStreamer& operator <<(const char* log) = 0;
-    virtual inline LogStreamer& operator <<(const char log) = 0;
-    virtual inline void flush() = 0;
-};
+    LogStreamer() = default;
 
-class CoutLogStreamer final : public LogStreamer
-{
-public:
-    virtual ~CoutLogStreamer() final = default;
-
-    inline CoutLogStreamer& operator<<(const char* log) override
+    void Setup(const std::string& filename)
     {
-        std::clog << log;
-        return *this;
-    }
+        m_logFilename = filename;
 
-    inline CoutLogStreamer& operator<<(const char log) override
-    {
-        std::clog << log;
-        return *this;
-    }
-
-    inline void flush() override
-    {
-        std::flush(std::clog);
-    }
-};
-
-class FileLogStreamer final : public LogStreamer
-{
-public:
-    virtual ~FileLogStreamer() final = default;
-
-    /**
-     @throws std::exception on failure
-    */
-    void SetLogFile(const std::string& filename)
-    {
-        if (std::filesystem::exists(filename) and not std::filesystem::is_regular_file(filename))
+        if (m_logFilename.empty())
         {
-            throw std::runtime_error("Cannot write to non regular file '" + filename + "'");
+            SetStreamToConsole();
+            return;
         }
 
-        std::ofstream file{ filename , std::ios::out | std::ios::ate | std::ios::app };
-        std::filesystem::permissions(filename,
-            std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
-            std::filesystem::perm_options::add
-        );
-
-        if (not file.is_open())
+        // try setup a file logger if specified
+        try
         {
-            throw std::runtime_error("Unable to open file '" + filename + "' for writing");
+            if (std::filesystem::exists(m_logFilename) and not std::filesystem::is_regular_file(m_logFilename))
+            {
+                throw std::runtime_error("cannot write to non regular file '" + m_logFilename + "'");
+            }
+
+            std::ofstream file{ m_logFilename , std::ios::out | std::ios::ate | std::ios::app };
+            std::filesystem::permissions(
+                m_logFilename,
+                std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
+                std::filesystem::perm_options::add
+            );
+
+            if (file.fail())
+            {
+                throw std::runtime_error("unable to open file '" + m_logFilename + "' for writing");
+            }
+
+            SetStreamToFile(std::move(file));
+
+            m_logFileCreator = std::make_unique<PeriodicTimer>(s_logFileCreatorPeriod, [this] { EnsureLogFileWriteable(); });
+            m_logFileCreator->Start();
         }
-
-        m_fileStream = std::move(file);
-    }
-
-    inline FileLogStreamer& operator<<(const char* log) override
-    {
-        m_fileStream << log;
-        return *this;
-    }
-
-    inline FileLogStreamer& operator<<(const char log) override
-    {
-        m_fileStream << log;
-        return *this;
-    }
-
-    inline void flush() override
-    {
-        std::flush(m_fileStream);
+        catch (const std::exception& e)
+        {
+            Log::Critical("==== failed to setup file logger. what: %s ====", e.what());
+        }
     }
 
 private:
-    std::ofstream m_fileStream{};
+    // Nothing in here is movable or copyable
+    LogStreamer(const LogStreamer&) = delete;
+    LogStreamer(LogStreamer&&) = delete;
+    LogStreamer& operator=(const LogStreamer&) = delete;
+    LogStreamer& operator=(LogStreamer&&) = delete;
+
+    void EnsureLogFileWriteable()
+    {
+        if (m_logFilename.empty())
+        {
+            return;
+        }
+
+        try
+        {
+            // everything is okay
+            if (std::filesystem::exists(m_logFilename) and std::filesystem::is_regular_file(m_logFilename))
+            {
+                return;
+            }
+
+            // No longer writing to log file
+
+            m_lostLogTime += s_logFileCreatorPeriod.count();
+
+            if (std::filesystem::exists(m_logFilename) and not std::filesystem::is_regular_file(m_logFilename))
+            {
+                std::fprintf(::stderr, "cannot write to non regular file '%s'", m_logFilename.c_str());
+                return;
+            }
+
+            std::ofstream file{ m_logFilename , std::ios::out | std::ios::ate | std::ios::app };
+            std::filesystem::permissions(
+                m_logFilename,
+                std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
+                std::filesystem::perm_options::add
+            );
+
+            if (file.fail())
+            {
+                std::fprintf(::stderr, "unable to open file '%s' for writing", m_logFilename.c_str());
+                return;
+            }
+
+            SetStreamToFile(std::move(file));
+
+            std::ostringstream lostLogTimeOSS;
+            lostLogTimeOSS << static_cast<decltype(s_logFileCreatorPeriod)>(m_lostLogTime);
+            Log::Critical("lost %s worth of logs", lostLogTimeOSS.str().c_str());
+            m_lostLogTime = {};
+        }
+        catch (const std::filesystem::filesystem_error& e)
+        {
+            std::fprintf(::stderr, "file system error when attempting to recreate file logger. e: %s", e.what());
+        }
+    }
+
+    void SetStreamToConsole()
+    {
+        std::lock_guard lk{ m_mutex };
+        m_logFileStream = {};
+        m_streamRef = s_consoleStream;
+    }
+
+    void SetStreamToFile(std::ofstream fileStream)
+    {
+        std::lock_guard lk{ m_mutex };
+        m_logFileStream = std::move(fileStream);
+        m_streamRef = m_logFileStream;
+    }
+
+private:
+    static constexpr TimeS s_logFileCreatorPeriod{ 60s };
+    static constexpr std::reference_wrapper<Stream> s_consoleStream{ std::clog };
+
+    std::reference_wrapper<Stream> m_streamRef{ s_consoleStream };
+    std::recursive_mutex m_mutex{};
+    std::string m_logFilename{};
+    size_t m_lostLogTime{ 0 };
+    std::ofstream m_logFileStream{};
+    std::unique_ptr<PeriodicTimer> m_logFileCreator{ nullptr };
+
+    friend void LogToStream(Level level, const char* fmt, va_list args);
 };
 
 struct LogTimestamp
@@ -112,7 +198,7 @@ struct LogTimestamp
     // :%03u requires 7 bytes max
     using MilliSecBuffer = char[7];
 
-    LogTimestamp()
+    LogTimestamp() noexcept
     {
         std::timespec_get(&m_timeSpec, TIME_UTC);
 
@@ -128,9 +214,9 @@ struct LogTimestamp
         snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03u", millisec);
     }
 
-    inline const SecondsBuffer& getSecondsBuffer() const { return m_secondsBuffer; };
+    inline const SecondsBuffer& getSecondsBuffer() const noexcept { return m_secondsBuffer; };
 
-    inline const MilliSecBuffer& getMilliSecBuffer() const { return m_msSecBuff; };
+    inline const MilliSecBuffer& getMilliSecBuffer() const noexcept { return m_msSecBuff; };
 
 private:
     SecondsBuffer m_secondsBuffer;
@@ -138,43 +224,10 @@ private:
     ::timespec m_timeSpec;
 };
 
-// All global variables visible only to this translation unit
+// For std::unordered_map<Logger::Level, ...>
+constexpr bool operator<(Level lhs, Level rhs) noexcept { return (static_cast<uint8_t>(lhs) < static_cast<uint8_t>(rhs)); }
 
-// Formatter control
-
-const char FORMAT_END[] = "\x1B[00m";
-const char FORMAT_BOLD[] = "\x1B[01m";
-const char FORMAT_DISABLED[] = "\x1B[02m";
-const char FORMAT_ITALIC[] = "\x1B[03m";
-const char FORMAT_URL[] = "\x1B[04m";
-const char FORMAT_BLINK[] = "\x1B[05m";
-const char FORMAT_BLINK2[] = "\x1B[06m";
-const char FORMAT_SELECTED[] = "\x1B[07m";
-const char FORMAT_INVISIBLE[] = "\x1B[08m";
-const char FORMAT_STRIKE[] = "\x1B[09m";
-const char FORMAT_DOUBLE_UNDERLINE[] = "\x1B[21m";
-
-// Dark Colours
-
-const char DARK_BLACK[] = "\x1B[30m";
-const char DARK_RED[] = "\x1B[31m";
-const char DARK_GREEN[] = "\x1B[32m";
-const char DARK_YELLOW[] = "\x1B[33m";
-const char DARK_BLUE[] = "\x1B[34m";
-const char DARK_VIOLET[] = "\x1B[35m";
-const char DARK_BEIGE[] = "\x1B[36m";
-const char DARK_WHITE[] = "\x1B[37m";
-
-// Light Colours
-
-const char LIGHT_GREY[] = "\x1B[90m";
-const char LIGHT_RED[] = "\x1B[91m";
-const char LIGHT_GREEN[] = "\x1B[92m";
-const char LIGHT_YELLOW[] = "\x1B[93m";
-const char LIGHT_BLUE[] = "\x1B[94m";
-const char LIGHT_VIOLET[] = "\x1B[95m";
-const char LIGHT_BEIGE[] = "\x1B[96m";
-const char LIGHT_WHITE[] = "\x1B[97m";
+// Global variables
 
 const std::unordered_map<Level, const char*> g_levelColour
 {
@@ -196,53 +249,26 @@ const std::unordered_map<Level, const char*> g_levelInfo
     {Level::Critical,   "CRIT "},
 };
 
-std::recursive_mutex g_logMutex;
-
 Level g_currentLogLevel{ Level::Debug };
 
-FileLogStreamer g_fileStreamer;
+LogStreamer g_logStreamer;
 
-CoutLogStreamer g_coutLogStreamer;
-
-// Default to cout streamer
-LogStreamer* g_logStreamer{ &g_coutLogStreamer };
+const thread_local std::string g_threadName{ LogFriendlyGetThreadName() };
 
 // Functions
 
 void SetLogLevel(Level logLevel) { g_currentLogLevel = logLevel; }
 
-void SetupLogger(std::optional<std::string> filename)
+void SetupLogger(const std::string& filename)
 {
-    LogStreamer* logStreamer{ nullptr };
-
-    // try setup a file logger is specified
-    if (filename)
-    {
-        try
-        {
-            g_fileStreamer.SetLogFile(*filename);
-            logStreamer = &g_fileStreamer;
-        }
-        catch (const std::exception& e)
-        {
-            std::cerr << "FAILED to create file streamer. what: " << e.what() << std::endl;
-        }
-    }
-
-    // Default to stdout
-    if (logStreamer == nullptr)
-    {
-        logStreamer = &g_coutLogStreamer;
-    }
-
-    g_logStreamer = logStreamer;
+    g_logStreamer.Setup(filename);
 }
 
 inline const char* GetLevelFormatter(Level level) { return g_levelColour.at(level); }
 
 inline const char* GetLevelInfo(Level level) { return g_levelInfo.at(level); }
 
-inline std::string GetThreadName()
+std::string LogFriendlyGetThreadName()
 {
     // Max allowed buffer for POSIX thread name
     using ThreadNameBuffer = char[16];
@@ -255,11 +281,9 @@ inline std::string GetThreadName()
     return oss.str();
 }
 
-inline void LogToStreamer(Level level, const char* fmt, va_list args)
+void LogToStream(Level level, const char* fmt, va_list args)
 {
     using MsgBuffer = char[1024];
-
-    static const thread_local std::string threadName{ GetThreadName() };
 
     MsgBuffer msgBuff;
     vsnprintf(msgBuff, sizeof(msgBuff), fmt, args);
@@ -272,15 +296,16 @@ inline void LogToStreamer(Level level, const char* fmt, va_list args)
     const char* levelInfo{ GetLevelInfo(level) };
 
     {
-        std::lock_guard lock{ g_logMutex };
-        (*g_logStreamer)
+        std::lock_guard lock{ g_logStreamer.m_mutex };
+        LogStreamer::Stream& stream{ g_logStreamer.m_streamRef.get() };
+        stream
             << levelFmt
             << '[' << secondsBuffer << milliSecBuffer << "] "
-            << '[' << threadName.c_str() << "] "
+            << '[' << g_threadName << "] "
             << '[' << levelInfo << "] "
             << msgBuff
             << FORMAT_END << '\n';
-        (*g_logStreamer).flush();
+        std::flush(stream);
     }
 }
 
@@ -296,7 +321,7 @@ void Trace(const char* msg, ...)
 
     va_list args;
     va_start(args, msg);
-    Logger::LogToStreamer(Logger::Trace, msg, args);
+    Logger::LogToStream(Logger::Trace, msg, args);
     va_end(args);
 }
 
@@ -307,7 +332,7 @@ void Debug(const char* msg, ...)
 
     va_list args;
     va_start(args, msg);
-    Logger::LogToStreamer(Logger::Debug, msg, args);
+    Logger::LogToStream(Logger::Debug, msg, args);
     va_end(args);
 }
 
@@ -318,7 +343,7 @@ void Info(const char* msg, ...)
 
     va_list args;
     va_start(args, msg);
-    Logger::LogToStreamer(Logger::Info, msg, args);
+    Logger::LogToStream(Logger::Info, msg, args);
     va_end(args);
 }
 
@@ -329,7 +354,7 @@ void Warning(const char* msg, ...)
 
     va_list args;
     va_start(args, msg);
-    Logger::LogToStreamer(Logger::Warning, msg, args);
+    Logger::LogToStream(Logger::Warning, msg, args);
     va_end(args);
 }
 
@@ -340,7 +365,7 @@ void Error(const char* msg, ...)
 
     va_list args;
     va_start(args, msg);
-    Logger::LogToStreamer(Logger::Error, msg, args);
+    Logger::LogToStream(Logger::Error, msg, args);
     va_end(args);
 }
 
@@ -351,7 +376,7 @@ void Critical(const char* msg, ...)
 
     va_list args;
     va_start(args, msg);
-    Logger::LogToStreamer(Logger::Critical, msg, args);
+    Logger::LogToStream(Logger::Critical, msg, args);
     va_end(args);
 }
 
