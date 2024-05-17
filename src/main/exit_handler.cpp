@@ -9,8 +9,16 @@
 namespace Sage::ExitHandler
 {
 
-void CreateHandler(const ExitHandle&& theExitHandle)
+void AttachExitHandler(ExitHandle&& theExitHandle)
 {
+    static bool attached{ false };
+    if (attached)
+    {
+        Log::Critical("exit handler has already been attached");
+        std::raise(SIGKILL);
+    }
+
+
     sigset_t signalsToBlock{};
     sigemptyset(&signalsToBlock);
 

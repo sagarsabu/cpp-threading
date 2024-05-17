@@ -19,7 +19,7 @@ inline uint GetNextTimerID()
 
 // Base timer
 
-Timer::Timer(const TimeNS& startDelta, const TimeNS& period, const TimerCallback&& callback) :
+Timer::Timer(const TimeNS& startDelta, const TimeNS& period, TimerCallback&& callback) :
     m_timerInterval{ .it_interval = NanoSecsToTimeSpec(period), .it_value = NanoSecsToTimeSpec(startDelta) },
     m_signalData{ .m_callback = std::move(callback), .m_timerId = GetNextTimerID() }
 {
@@ -96,7 +96,7 @@ FireOnceTimer::FireOnceTimer() :
     Timer{ 0ns, 0ns, [] { } }
 { }
 
-FireOnceTimer::FireOnceTimer(const TimeNS& delta, const TimerCallback&& callback) :
+FireOnceTimer::FireOnceTimer(const TimeNS& delta, TimerCallback&& callback) :
     Timer{ delta, 0ns, std::move(callback) }
 { }
 
@@ -106,7 +106,7 @@ PeriodicTimer::PeriodicTimer() :
     Timer{ 0ns, 0ns, [] { } }
 { }
 
-PeriodicTimer::PeriodicTimer(const TimeNS& period, const TimerCallback&& callback) :
+PeriodicTimer::PeriodicTimer(const TimeNS& period, TimerCallback&& callback) :
     Timer{ period, period, std::move(callback) }
 { }
 

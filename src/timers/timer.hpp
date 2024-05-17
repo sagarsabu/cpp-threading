@@ -44,7 +44,7 @@ public:
     uint Id() const { return m_signalData.m_timerId; };
 
 protected:
-    Timer(const TimeNS& startDelta, const TimeNS& period, const TimerCallback&& callback);
+    Timer(const TimeNS& startDelta, const TimeNS& period, TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -78,7 +78,7 @@ class FireOnceTimer final : public Timer
 public:
     FireOnceTimer();
 
-    FireOnceTimer(const TimeNS& delta, const TimerCallback&& callback);
+    FireOnceTimer(const TimeNS& delta, TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -95,7 +95,7 @@ class PeriodicTimer final : public Timer
 public:
     PeriodicTimer();
 
-    PeriodicTimer(const TimeNS& period, const TimerCallback&& callback);
+    PeriodicTimer(const TimeNS& period, TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable

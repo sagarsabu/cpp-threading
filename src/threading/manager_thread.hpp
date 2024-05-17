@@ -62,8 +62,8 @@ class ManagerThread final : public Thread
 {
 public:
     static constexpr inline TimeMS TEARDOWN_THRESHOLD{ 1000ms };
-    static constexpr inline TimeMS TEST_TIMEOUT{ 10ms };
-    static constexpr inline TimeMS TRANSMIT_PERIOD{ 15ms };
+    static constexpr inline TimeMS DEFAULT_TEST_TIMEOUT{ 10ms };
+    static constexpr inline TimeMS DEFAULT_TRANSMIT_PERIOD{ 15ms };
 
 public:
     ManagerThread();
@@ -73,6 +73,10 @@ public:
     void RequestShutdown();
 
     void WaitForShutdown();
+
+    void SetTransmitPeriod(const TimeMS& period) { m_transmitPeriod = period; }
+
+    void SetTestTimeout(const TimeMS& period) { m_testTimeout = period; }
 
 private:
     void SendEventsToWorkers();
@@ -97,6 +101,8 @@ private:
     std::atomic<bool> m_workersTerminated{ false };
     std::binary_semaphore m_shutdownInitiateSignal{ 0 };
     std::binary_semaphore m_shutdownInitiatedSignal{ 0 };
+    TimeMS m_transmitPeriod{ DEFAULT_TRANSMIT_PERIOD };
+    TimeMS m_testTimeout{ DEFAULT_TEST_TIMEOUT };
 };
 
 } // namespace Sage::Threading

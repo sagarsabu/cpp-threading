@@ -109,7 +109,7 @@ void ManagerThread::SendEventsToWorkers()
     for (auto worker : m_workers)
     {
         Log::Info("%s sending work to %s", Name(), worker->Name());
-        worker->TransmitEvent(std::make_unique<ManagerWorkerTestEvent>(TEST_TIMEOUT));
+        worker->TransmitEvent(std::make_unique<ManagerWorkerTestEvent>(m_testTimeout));
         Log::Debug("%s completed sending work to %s", Name(), worker->Name());
     }
 }
@@ -165,7 +165,7 @@ void ManagerThread::Starting()
 {
     Log::Info("%s setting up periodic timer for self transmitting", Name());
 
-    AddPeriodicTimer(ManagerTimerEvent::TransmitWork, TRANSMIT_PERIOD);
+    AddPeriodicTimer(ManagerTimerEvent::TransmitWork, m_transmitPeriod);
     StartTimer(ManagerTimerEvent::TransmitWork);
 }
 
