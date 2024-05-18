@@ -7,23 +7,15 @@
 namespace Sage
 {
 
-inline uint GetNextTimerID()
-{
-    static uint rollingTimerId{ 0 };
-
-    if (++rollingTimerId == 0)
-        rollingTimerId = 1;
-
-    return rollingTimerId;
-}
-
 // Base timer
 
-Timer::Timer(const TimeNS& startDelta, const TimeNS& period, TimerCallback&& callback) :
+Timer::Timer(const std::string& name, const TimeNS& startDelta, const TimeNS& period, TimerCallback&& callback) :
     m_timerInterval{ .it_interval = NanoSecsToTimeSpec(period), .it_value = NanoSecsToTimeSpec(startDelta) },
-    m_signalData{ .m_callback = std::move(callback), .m_timerId = GetNextTimerID() }
+    m_callback{ std::move(callback) },
+    m_name{ name },
+    m_signalData{ .m_theTimer = *this }
 {
-    LOG_DEBUG("c'tor timer with id:%d", Id());
+    LOG_DEBUG("[%s] c'tor timer", Name());
 
     sigevent signalEvent{};
     struct sigaction signalAction {};
@@ -40,8 +32,8 @@ Timer::Timer(const TimeNS& startDelta, const TimeNS& period, TimerCallback&& cal
     signalAction.sa_sigaction = [](int /**sig*/, siginfo_t* si, void* /**uc*/) -> void
     {
         auto signalData = static_cast<const SigValData*>(si->si_ptr);
-        LOG_TRACE("triggering callback for timer-id:%d", signalData->m_timerId);
-        (signalData->m_callback)();
+        LOG_TRACE("[%s] triggering callback", signalData->m_theTimer.Name());
+        (signalData->m_theTimer.m_callback)();
     };
 
     // clear out any signals
@@ -50,27 +42,27 @@ Timer::Timer(const TimeNS& startDelta, const TimeNS& period, TimerCallback&& cal
     // Setup the signal handler
     if (sigaction(signalEvent.sigev_signo, &signalAction, nullptr) == -1)
     {
-        LOG_CRITICAL("failed to set signal action for id:%d. %s", Id(), strerror(errno));
+        LOG_CRITICAL("[%s] failed to set signal action. e: %s", Name(), strerror(errno));
         return;
     }
 
     // setup the timer
     if (timer_create(CLOCK_MONOTONIC, &signalEvent, &m_timer) != 0)
     {
-        LOG_CRITICAL("failed to create timer for id:%d. %s", Id(), strerror(errno));
+        LOG_CRITICAL("[%s] failed to create timer. e: %s", Name(), strerror(errno));
         return;
     }
 
-    LOG_TRACE("successfully setup id:%d for thread-id:%d", Id(), gettid());
+    LOG_TRACE("[%s] successfully setup for thread-id:%d", Name(), gettid());
 }
 
 Timer::~Timer()
 {
-    LOG_DEBUG("timer id:%d d'tor", Id());
+    LOG_DEBUG("[%s] timer d'tor", Name());
 
     if (timer_delete(m_timer) != 0)
     {
-        LOG_CRITICAL("failed to delete timer for id:%d. %s", Id(), strerror(errno));
+        LOG_CRITICAL("[%s] failed to delete timer. e: %s", Name(), strerror(errno));
     }
 }
 
@@ -78,7 +70,7 @@ void Timer::Start() const
 {
     if (timer_settime(m_timer, 0, &m_timerInterval, nullptr) != 0)
     {
-        LOG_CRITICAL("failed to start time for id:%d. %s", Id(), strerror(errno));
+        LOG_CRITICAL("[%s] failed to start time. e: %s", Name(), strerror(errno));
     }
 }
 
@@ -86,28 +78,20 @@ void Timer::Stop() const
 {
     if (timer_settime(m_timer, 0, &DISABLED_TIMER, nullptr) != 0)
     {
-        LOG_CRITICAL("failed to stop time for id:%d. %s", Id(), strerror(errno));
+        LOG_CRITICAL("[%s] failed to stop time. e: %s", Name(), strerror(errno));
     }
 }
 
 // Fire once timer
 
-FireOnceTimer::FireOnceTimer() :
-    Timer{ 0ns, 0ns, [] { } }
-{ }
-
-FireOnceTimer::FireOnceTimer(const TimeNS& delta, TimerCallback&& callback) :
-    Timer{ delta, 0ns, std::move(callback) }
+FireOnceTimer::FireOnceTimer(const std::string& name, const TimeNS& delta, TimerCallback&& callback) :
+    Timer{ name, delta, 0ns, std::move(callback) }
 { }
 
 // Periodic timer
 
-PeriodicTimer::PeriodicTimer() :
-    Timer{ 0ns, 0ns, [] { } }
-{ }
-
-PeriodicTimer::PeriodicTimer(const TimeNS& period, TimerCallback&& callback) :
-    Timer{ period, period, std::move(callback) }
+PeriodicTimer::PeriodicTimer(const std::string& name, const TimeNS& period, TimerCallback&& callback) :
+    Timer{ name, period, period, std::move(callback) }
 { }
 
 } // namespace Sage

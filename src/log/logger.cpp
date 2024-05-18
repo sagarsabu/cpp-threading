@@ -94,7 +94,7 @@ public:
 
             SetStreamToFile(std::move(file));
 
-            m_logFileCreator = std::make_unique<PeriodicTimer>(s_logFileCreatorPeriod, [this] { EnsureLogFileWriteable(); });
+            m_logFileCreator = std::make_unique<PeriodicTimer>("LogFileCreator", s_logFileCreatorPeriod, [this] { EnsureLogFileWriteable(); });
             m_logFileCreator->Start();
         }
         catch (const std::exception& e)
@@ -212,9 +212,9 @@ struct LogTimestamp
         snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03u", millisec);
     }
 
-    inline const SecondsBuffer& getSecondsBuffer() const noexcept { return m_secondsBuffer; };
+    constexpr const SecondsBuffer& getSecondsBuffer() const noexcept { return m_secondsBuffer; };
 
-    inline const MilliSecBuffer& getMilliSecBuffer() const noexcept { return m_msSecBuff; };
+    constexpr const MilliSecBuffer& getMilliSecBuffer() const noexcept { return m_msSecBuff; };
 
 private:
     SecondsBuffer m_secondsBuffer;
@@ -246,7 +246,11 @@ constexpr std::array<const char*, Level::Critical + 1> LEVEL_INFOS
 
 Level g_currentLogLevel{ Level::Info };
 
-LogStreamer g_logStreamer;
+/**
+ * Intentionally leaking here.
+ * Logging in global object destructor's may cause issue if we destroy the logger
+*/
+LogStreamer* const g_logStreamer{ new LogStreamer };
 
 const thread_local std::string g_threadName{ Internal::LogFriendlyGetThreadName() };
 
@@ -256,7 +260,7 @@ void SetLogLevel(Level logLevel) { g_currentLogLevel = logLevel; }
 
 void SetupLogger(const std::string& filename)
 {
-    g_logStreamer.Setup(filename);
+    g_logStreamer->Setup(filename);
 }
 
 constexpr const char* GetLevelFormatter(Level level) noexcept { return LEVEL_COLOURS[level]; }
@@ -267,24 +271,18 @@ void LogToStream(Level level, const char* fmt, va_list args)
 {
     using MsgBuffer = char[1024];
 
+    LogTimestamp ts;
     MsgBuffer msgBuff;
     vsnprintf(msgBuff, sizeof(msgBuff), fmt, args);
 
-    LogTimestamp ts;
-    const LogTimestamp::SecondsBuffer& secondsBuffer{ ts.getSecondsBuffer() };
-    const LogTimestamp::MilliSecBuffer& milliSecBuffer{ ts.getMilliSecBuffer() };
-
-    const char* levelFmt{ GetLevelFormatter(level) };
-    const char* levelInfo{ GetLevelInfo(level) };
-
     {
-        std::lock_guard lock{ g_logStreamer.m_mutex };
-        LogStreamer::Stream& stream{ g_logStreamer.m_streamRef.get() };
+        std::lock_guard lock{ g_logStreamer->m_mutex };
+        LogStreamer::Stream& stream{ g_logStreamer->m_streamRef.get() };
         stream
-            << levelFmt
-            << '[' << secondsBuffer << milliSecBuffer << "] "
+            << GetLevelFormatter(level)
+            << '[' << ts.getSecondsBuffer() << ts.getMilliSecBuffer() << "] "
             << '[' << g_threadName << "] "
-            << '[' << levelInfo << "] "
+            << '[' << GetLevelInfo(level) << "] "
             << msgBuff
             << FORMAT_END << '\n';
         std::flush(stream);

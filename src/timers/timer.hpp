@@ -41,10 +41,10 @@ public:
 
     void Stop() const;
 
-    uint Id() const { return m_signalData.m_timerId; };
+    const char* Name() const noexcept { return m_name.c_str(); };
 
 protected:
-    Timer(const TimeNS& startDelta, const TimeNS& period, TimerCallback&& callback);
+    Timer(const std::string& name, const TimeNS& startDelta, const TimeNS& period, TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -55,17 +55,18 @@ private:
 
     struct SigValData
     {
-        const TimerCallback m_callback;
-        const uint m_timerId;
+        const Timer& m_theTimer;
     };
 
 private:
     timer_t m_timer{};
     const itimerspec m_timerInterval;
+    const TimerCallback m_callback;
+    const std::string m_name{ "Unknown" };
     const SigValData m_signalData;
 
 private:
-    static const inline itimerspec DISABLED_TIMER{
+    static constexpr itimerspec DISABLED_TIMER{
         .it_interval = {.tv_sec = 0, .tv_nsec = 0 },
         .it_value = {.tv_sec = 0, .tv_nsec = 0 }
     };
@@ -76,9 +77,7 @@ private:
 class FireOnceTimer final : public Timer
 {
 public:
-    FireOnceTimer();
-
-    FireOnceTimer(const TimeNS& delta, TimerCallback&& callback);
+    FireOnceTimer(const std::string& name, const TimeNS& delta, TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable
@@ -93,9 +92,7 @@ private:
 class PeriodicTimer final : public Timer
 {
 public:
-    PeriodicTimer();
-
-    PeriodicTimer(const TimeNS& period, TimerCallback&& callback);
+    PeriodicTimer(const std::string& name, const TimeNS& period, TimerCallback&& callback);
 
 private:
     // Nothing in here is movable or copyable

@@ -60,7 +60,7 @@ void Thread::Stop()
 
 void Thread::TransmitEvent(UniqueThreadEvent event)
 {
-    if (m_stopping)
+    if (m_stopping) [[unlikely]]
     {
         LOG_CRITICAL("%s transmit-event dropped event for receiver:%s",
             Name(), event->ReceiverName());
@@ -78,13 +78,14 @@ void Thread::TransmitEvent(UniqueThreadEvent event)
 void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr != m_timers.end())
+    if (itr != m_timers.end()) [[unlikely]]
     {
         LOG_ERROR("%s add-periodic-timer timer-event-id:%d already exists", Name(), timerEventId);
         return;
     }
 
-    m_timers[timerEventId] = std::make_unique<PeriodicTimer>(period, [this, timerEventId]
+    const std::string& timerName{ m_threadName + "-Periodic-" + std::to_string(timerEventId) };
+    m_timers[timerEventId] = std::make_unique<PeriodicTimer>(timerName, period, [this, timerEventId]
     {
         TransmitEvent(std::make_unique<TimerEvent>(timerEventId));
     });
@@ -93,13 +94,14 @@ void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
 void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta)
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr != m_timers.end())
+    if (itr != m_timers.end()) [[unlikely]]
     {
         LOG_ERROR("%s add-fire-once-timer timer-event-id:%d already exists", Name(), timerEventId);
         return;
     }
 
-    m_timers[timerEventId] = std::make_unique<FireOnceTimer>(delta, [this, timerEventId]
+    const std::string& timerName{ m_threadName + "-FireOnce-" + std::to_string(timerEventId) };
+    m_timers[timerEventId] = std::make_unique<FireOnceTimer>(timerName, delta, [this, timerEventId]
     {
         TransmitEvent(std::make_unique<TimerEvent>(timerEventId));
     });
@@ -108,7 +110,7 @@ void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta)
 void Thread::RemoveTimer(TimerEvent::EventID timerEventId)
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end())
+    if (itr == m_timers.end()) [[unlikely]]
     {
         LOG_ERROR("%s remove-timer timer-event-id:%d does not exist", Name(), timerEventId);
         return;
@@ -120,26 +122,26 @@ void Thread::RemoveTimer(TimerEvent::EventID timerEventId)
 void Thread::StartTimer(TimerEvent::EventID timerEventId) const
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end())
+    if (itr == m_timers.end()) [[unlikely]]
     {
         LOG_ERROR("%s start-timer timer-event-id:%d does not exist", Name(), timerEventId);
         return;
     }
 
-    LOG_DEBUG("%s start-timer timer-event-id:%d timer-id:%d", Name(), timerEventId, itr->second->Id());
+    LOG_DEBUG("%s start-timer timer-event-id:%d timer-name:%s", Name(), timerEventId, itr->second->Name());
     itr->second->Start();
 }
 
 void Thread::StopTimer(TimerEvent::EventID timerEventId) const
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end())
+    if (itr == m_timers.end()) [[unlikely]]
     {
         LOG_ERROR("%s stop-timer timer-event-id:%d does not exist", Name(), timerEventId);
         return;
     }
 
-    LOG_DEBUG("%s stop-timer timer-event-id:%d timer-id:%d", Name(), timerEventId, itr->second->Id());
+    LOG_DEBUG("%s stop-timer timer-event-id:%d timer-name:%s", Name(), timerEventId, itr->second->Name());
     itr->second->Stop();
 }
 
@@ -200,23 +202,24 @@ void Thread::ProcessEvents()
         if (threadEvent == nullptr)
         {
             LOG_ERROR("%s process-events received null event for receiver", Name());
-            continue;
         }
-
-        switch (threadEvent->Receiver())
+        else [[likely]]
         {
-            case EventReceiver::Self:
+            switch (threadEvent->Receiver())
             {
-                ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleSelfEvent", m_handleEventThreshold };
-                HandleSelfEvent(std::move(threadEvent));
-                break;
-            }
+                case EventReceiver::Self:
+                {
+                    ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleSelfEvent", m_handleEventThreshold };
+                    HandleSelfEvent(std::move(threadEvent));
+                    break;
+                }
 
-            default:
-            {
-                ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleTimer", m_handleEventThreshold };
-                HandleEvent(std::move(threadEvent));
-                break;
+                default:
+                {
+                    ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleTimer", m_handleEventThreshold };
+                    HandleEvent(std::move(threadEvent));
+                    break;
+                }
             }
         }
     }
@@ -236,7 +239,7 @@ void Thread::ProcessEvents()
 
 void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
 {
-    if (threadEvent->Receiver() != EventReceiver::Self)
+    if (threadEvent->Receiver() != EventReceiver::Self) [[unlikely]]
     {
         LOG_CRITICAL("%s handle-self-event got event from unexpected receiver:%s",
             Name(), threadEvent->ReceiverName());
@@ -250,7 +253,7 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
         {
             LOG_INFO("%s received exit event. requesting stop.", Name());
             // Trigger via timer so we return out of the main processing loop
-            m_stopTimer = std::make_unique<FireOnceTimer>(1ms, [this]
+            m_stopTimer = std::make_unique<FireOnceTimer>(m_threadName + "-ExitTimer", 1ms, [this]
             {
                 if (m_thread.request_stop())
                 {

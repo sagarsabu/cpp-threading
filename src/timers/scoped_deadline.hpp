@@ -19,7 +19,7 @@ struct ScopedDeadline final
     {
         auto now = Clock::now();
         auto duration = std::chrono::duration_cast<TimeMS>(now - m_start);
-        if (duration <= m_deadline)
+        if (duration <= m_deadline) [[likely]]
         {
             LOG_TRACE("ScopedDeadline '%s' took:%ld ms", m_tag.c_str(), duration.count());
         }

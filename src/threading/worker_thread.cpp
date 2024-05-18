@@ -13,7 +13,7 @@ WorkerThread::WorkerThread() :
 
 void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
-    if (threadEvent->Receiver() != EventReceiver::WorkerThread)
+    if (threadEvent->Receiver() != EventReceiver::WorkerThread) [[unlikely]]
     {
         LOG_ERROR("%s handle-event got event intended for receiver:%s",
             Name(), threadEvent->ReceiverName());

@@ -46,7 +46,7 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
 
         constexpr auto shutdownThreshold{ 5s };
         constexpr auto shutdownTick{ 500ms };
-        PeriodicTimer shutdownTimer(shutdownTick, [&]
+        PeriodicTimer shutdownTimer("ExitHandlerShutdownTimer", shutdownTick, [&]
         {
             static const auto shutdownStart{ Clock::now() - shutdownTick };
 
