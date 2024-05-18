@@ -102,7 +102,6 @@ auto GetCLiArgs(int argc, char** const argv)
     return std::make_pair(logLevel, logFile);
 }
 
-
 int main(int argc, char** const argv)
 {
     int res{ 0 };
@@ -115,12 +114,12 @@ int main(int argc, char** const argv)
         Logger::SetupLogger(logFile);
         Logger::SetLogLevel(logLevel);
 
-        Log::Info("==== starting ====");
+        LOG_INFO("==== starting ====");
 
         Threading::ManagerThread* managerPtr{ nullptr };
         ExitHandler::AttachExitHandler([&managerPtr]
         {
-            Log::Info("exit-handle triggered");
+            LOG_INFO("exit-handle triggered");
             if (managerPtr != nullptr)
             {
                 managerPtr->RequestShutdown();
@@ -146,15 +145,15 @@ int main(int argc, char** const argv)
     }
     catch (const std::exception& e)
     {
-        Log::Critical("caught unexpected std exception. what: %s. shutting down.", e.what());
+        LOG_CRITICAL("caught unexpected std exception. what: %s. shutting down.", e.what());
         res = 2;
     }
     catch (...)
     {
-        Log::Critical("caught unknown exception. shutting down.");
+        LOG_CRITICAL("caught unknown exception. shutting down.");
         res = 1;
     }
 
-    Log::Info("==== terminating with return-code:%d ====", res);
+    LOG_INFO("==== terminating with return-code:%d ====", res);
     return res;
 }

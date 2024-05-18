@@ -14,7 +14,7 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
     static bool attached{ false };
     if (attached)
     {
-        Log::Critical("exit handler has already been attached");
+        LOG_CRITICAL("exit handler has already been attached");
         std::raise(SIGKILL);
     }
 
@@ -30,11 +30,11 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
 
     if (pthread_sigmask(SIG_BLOCK, &signalsToBlock, nullptr) != 0)
     {
-        Log::Critical("failed to block exit signals. e: %s", strerror(errno));
+        LOG_CRITICAL("failed to block exit signals. e: %s", strerror(errno));
     }
     else
     {
-        Log::Info("successfully blocked exit signals");
+        LOG_INFO("successfully blocked exit signals");
     }
 
     std::thread([exitHandle = std::move(theExitHandle), signalsToBlock = std::move(signalsToBlock)]
@@ -55,22 +55,22 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
             if (duration >= shutdownThreshold)
             {
                 // Can't be caught so the os will kill us
-                Log::Critical("shutdown duration exceeded. forcing shutdown");
+                LOG_CRITICAL("shutdown duration exceeded. forcing shutdown");
                 std::raise(SIGKILL);
             }
             else
             {
-                Log::Warning("shutdown duration at %ld ms", duration.count());
+                LOG_WARNING("shutdown duration at %ld ms", duration.count());
             }
         });
 
-        Log::Info("exit-handler waiting for exit signal");
+        LOG_INFO("exit-handler waiting for exit signal");
 
         while (true)
         {
             if (sigwait(&signalsToBlock, &receivedSignal) != 0)
             {
-                Log::Critical("sigwait failed when waiting for exit. e: %s", strerror(errno));
+                LOG_CRITICAL("sigwait failed when waiting for exit. e: %s", strerror(errno));
                 continue;
             }
 
@@ -84,12 +84,12 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
                     if (not triggered)
                     {
                         triggered = true;
-                        Log::Info("exit-handler received signal '%s'. triggering exit-handle.", strsignal(receivedSignal));
+                        LOG_INFO("exit-handler received signal '%s'. triggering exit-handle.", strsignal(receivedSignal));
                         shutdownTimer.Start();
                     }
                     else
                     {
-                        Log::Critical("exit-handler received additional signal '%s'. triggering exit-handle again.", strsignal(receivedSignal));
+                        LOG_CRITICAL("exit-handler received additional signal '%s'. triggering exit-handle again.", strsignal(receivedSignal));
                     }
 
                     exitHandle();
@@ -98,7 +98,7 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
 
                 default:
                 {
-                    Log::Critical("got unexpected signal:%d", receivedSignal);
+                    LOG_CRITICAL("got unexpected signal:%d", receivedSignal);
                     break;
                 }
             }

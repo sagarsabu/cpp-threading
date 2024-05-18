@@ -1,12 +1,10 @@
 #include <cstdarg>
-#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
 #include <sstream>
 #include <iomanip>
 #include <thread>
-#include <unordered_map>
 #include <fstream>
 #include <filesystem>
 
@@ -60,7 +58,7 @@ constexpr char LIGHT_WHITE[] = "\x1B[97m";
 class LogStreamer
 {
 public:
-    using Stream = std::basic_ostream<char>;
+    using Stream = std::ostream;
 
     LogStreamer() = default;
 
@@ -101,7 +99,7 @@ public:
         }
         catch (const std::exception& e)
         {
-            Log::Critical("==== failed to setup file logger. what: %s ====", e.what());
+            LOG_CRITICAL("==== failed to setup file logger. what: %s ====", e.what());
         }
     }
 
@@ -154,7 +152,7 @@ private:
 
             std::ostringstream lostLogTimeOSS;
             lostLogTimeOSS << static_cast<decltype(s_logFileCreatorPeriod)>(m_lostLogTime);
-            Log::Critical("lost %s worth of logs", lostLogTimeOSS.str().c_str());
+            LOG_CRITICAL("lost %s worth of logs", lostLogTimeOSS.str().c_str());
             m_lostLogTime = {};
         }
         catch (const std::filesystem::filesystem_error& e)
@@ -224,36 +222,33 @@ private:
     ::timespec m_timeSpec;
 };
 
-// For std::unordered_map<Logger::Level, ...>
-constexpr bool operator<(Level lhs, Level rhs) noexcept { return (static_cast<uint8_t>(lhs) < static_cast<uint8_t>(rhs)); }
-
 // Global variables
 
-const std::unordered_map<Level, const char*> g_levelColour
+constexpr std::array<const char*, Level::Critical + 1> LEVEL_COLOURS
 {
-    {Level::Trace,      LIGHT_GREEN},
-    {Level::Debug,      DARK_BLUE},
-    {Level::Info,       DARK_WHITE},
-    {Level::Warning,    LIGHT_YELLOW},
-    {Level::Error,      LIGHT_RED},
-    {Level::Critical,   DARK_RED},
+    LIGHT_GREEN,    // Level::Trace
+    DARK_BLUE,      // Level::Debug
+    DARK_WHITE,     // Level::Info
+    LIGHT_YELLOW,   // Level::Warning
+    LIGHT_RED,      // Level::Error
+    DARK_RED,       // Level::Critical
 };
 
-const std::unordered_map<Level, const char*> g_levelInfo
+constexpr std::array<const char*, Level::Critical + 1> LEVEL_INFOS
 {
-    {Level::Trace,      "TRACE"},
-    {Level::Debug,      "DEBUG"},
-    {Level::Info,       "INFO "},
-    {Level::Warning,    "WARN "},
-    {Level::Error,      "ERROR"},
-    {Level::Critical,   "CRIT "},
+    "TRACE",        // Level::Trace
+    "DEBUG",        // Level::Debug
+    "INFO ",        // Level::Info
+    "WARN ",        // Level::Warning
+    "ERROR",        // Level::Error
+    "CRIT ",        // Level::Critical
 };
 
-Level g_currentLogLevel{ Level::Debug };
+Level g_currentLogLevel{ Level::Info };
 
 LogStreamer g_logStreamer;
 
-const thread_local std::string g_threadName{ LogFriendlyGetThreadName() };
+const thread_local std::string g_threadName{ Internal::LogFriendlyGetThreadName() };
 
 // Functions
 
@@ -264,22 +259,9 @@ void SetupLogger(const std::string& filename)
     g_logStreamer.Setup(filename);
 }
 
-inline const char* GetLevelFormatter(Level level) { return g_levelColour.at(level); }
+constexpr const char* GetLevelFormatter(Level level) noexcept { return LEVEL_COLOURS[level]; }
 
-inline const char* GetLevelInfo(Level level) { return g_levelInfo.at(level); }
-
-std::string LogFriendlyGetThreadName()
-{
-    // Max allowed buffer for POSIX thread name
-    using ThreadNameBuffer = char[16];
-
-    ThreadNameBuffer threadName;
-    pthread_getname_np(pthread_self(), threadName, sizeof(threadName));
-
-    std::ostringstream oss;
-    oss << std::left << std::setw(sizeof(threadName)) << threadName;
-    return oss.str();
-}
+constexpr const char* GetLevelInfo(Level level) noexcept { return LEVEL_INFOS[level]; }
 
 void LogToStream(Level level, const char* fmt, va_list args)
 {
@@ -309,16 +291,11 @@ void LogToStream(Level level, const char* fmt, va_list args)
     }
 }
 
-} // namespace Logger
-
-namespace Log
+namespace Internal
 {
 
 void Trace(const char* msg, ...)
 {
-    if (Logger::Trace < Logger::g_currentLogLevel)
-        return;
-
     va_list args;
     va_start(args, msg);
     Logger::LogToStream(Logger::Trace, msg, args);
@@ -327,9 +304,6 @@ void Trace(const char* msg, ...)
 
 void Debug(const char* msg, ...)
 {
-    if (Logger::Debug < Logger::g_currentLogLevel)
-        return;
-
     va_list args;
     va_start(args, msg);
     Logger::LogToStream(Logger::Debug, msg, args);
@@ -338,9 +312,6 @@ void Debug(const char* msg, ...)
 
 void Info(const char* msg, ...)
 {
-    if (Logger::Info < Logger::g_currentLogLevel)
-        return;
-
     va_list args;
     va_start(args, msg);
     Logger::LogToStream(Logger::Info, msg, args);
@@ -349,9 +320,6 @@ void Info(const char* msg, ...)
 
 void Warning(const char* msg, ...)
 {
-    if (Logger::Warning < Logger::g_currentLogLevel)
-        return;
-
     va_list args;
     va_start(args, msg);
     Logger::LogToStream(Logger::Warning, msg, args);
@@ -360,9 +328,6 @@ void Warning(const char* msg, ...)
 
 void Error(const char* msg, ...)
 {
-    if (Logger::Error < Logger::g_currentLogLevel)
-        return;
-
     va_list args;
     va_start(args, msg);
     Logger::LogToStream(Logger::Error, msg, args);
@@ -371,15 +336,29 @@ void Error(const char* msg, ...)
 
 void Critical(const char* msg, ...)
 {
-    if (Logger::Critical < Logger::g_currentLogLevel)
-        return;
-
     va_list args;
     va_start(args, msg);
     Logger::LogToStream(Logger::Critical, msg, args);
     va_end(args);
 }
 
-} // namespace Log
+std::string LogFriendlyGetThreadName()
+{
+    // Max allowed buffer for POSIX thread name
+    using ThreadNameBuffer = char[16];
+
+    ThreadNameBuffer threadName;
+    pthread_getname_np(pthread_self(), threadName, sizeof(threadName));
+
+    std::ostringstream oss;
+    oss << std::left << std::setw(sizeof(threadName)) << threadName;
+    return oss.str();
+}
+
+bool ShouldLog(Level level) noexcept { return level >= g_currentLogLevel; }
+
+} // namespace Internal
+
+} // namespace Logger
 
 } // namespace Sage

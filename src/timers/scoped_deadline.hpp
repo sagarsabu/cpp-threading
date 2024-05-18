@@ -21,11 +21,11 @@ struct ScopedDeadline final
         auto duration = std::chrono::duration_cast<TimeMS>(now - m_start);
         if (duration <= m_deadline)
         {
-            Log::Trace("ScopedDeadline '%s' took:%ld ms", m_tag.c_str(), duration.count());
+            LOG_TRACE("ScopedDeadline '%s' took:%ld ms", m_tag.c_str(), duration.count());
         }
         else
         {
-            Log::Warning("ScopedDeadline '%s' took:%ld ms deadline:%ld ms",
+            LOG_WARNING("ScopedDeadline '%s' took:%ld ms deadline:%ld ms",
                 m_tag.c_str(), duration.count(), m_deadline.count());
         }
     }
