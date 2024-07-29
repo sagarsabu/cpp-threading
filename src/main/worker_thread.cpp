@@ -1,6 +1,6 @@
 #include "log/logger.hpp"
-#include "threading/worker_thread.hpp"
-#include "threading/manager_thread.hpp"
+#include "main/worker_thread.hpp"
+#include "main/manager_thread.hpp"
 
 namespace Sage::Threading
 {

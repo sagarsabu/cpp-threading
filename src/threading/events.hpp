@@ -32,14 +32,13 @@ public:
             {EventReceiver::WorkerThread,     "WorkerThread"},
         };
 
-        auto itr = receiverNameMap.find(m_receiver);
-        if (itr != receiverNameMap.end())
+        if (auto itr = receiverNameMap.find(m_receiver); itr != receiverNameMap.end())
         {
             return itr->second;
         }
 
         return "Unknown";
-    };
+    }
 
 protected:
     explicit ThreadEvent(EventReceiver receiver) : m_receiver{ receiver } { }

@@ -6,9 +6,13 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
+file(GLOB_RECURSE SRCS
+    src/**.cpp
+)
 
-add_compile_options(
+add_executable(cpp-threading ${SRCS})
+
+target_compile_options(cpp-threading PRIVATE
     -Wall
     -Wextra
     -Werror
@@ -21,16 +25,14 @@ add_compile_options(
     -Wpedantic
 )
 
-file(GLOB_RECURSE SRCS
-    src/**.cpp
-)
+find_package(Threads REQUIRED)
+find_library(LIB_RT NAMES rt REQUIRED)
 
-add_executable(cpp-threading ${SRCS})
-
-target_include_directories(cpp-threading PUBLIC
+target_include_directories(cpp-threading PRIVATE
     src/
 )
 
-target_link_libraries(
-    cpp-threading PUBLIC pthread rt
+target_link_libraries(cpp-threading PRIVATE
+    Threads::Threads
+    ${LIB_RT}
 )

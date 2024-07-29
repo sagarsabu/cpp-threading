@@ -177,7 +177,7 @@ void Thread::ProcessEvents()
         return;
     }
 
-    // Only start the deadline if the events to process
+    // Only start the deadline if there are events to process
     ScopedDeadline processDeadline{ m_threadName + "@ProcessEvents", PROCESS_EVENTS_THRESHOLD };
     size_t eventsQueued{ 0 };
     {

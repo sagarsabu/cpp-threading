@@ -7,8 +7,8 @@
 #include "log/logger.hpp"
 #include "timers/timer.hpp"
 #include "main/exit_handler.hpp"
-#include "threading/manager_thread.hpp"
-#include "threading/worker_thread.hpp"
+#include "main/manager_thread.hpp"
+#include "main/worker_thread.hpp"
 
 using namespace Sage;
 
