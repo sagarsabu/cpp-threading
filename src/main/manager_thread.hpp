@@ -76,8 +76,6 @@ public:
 
     void SetTransmitPeriod(const TimeMS& period) { m_transmitPeriod = period; }
 
-    void SetTestTimeout(const TimeMS& period) { m_testTimeout = period; }
-
 private:
     void SendEventsToWorkers();
 

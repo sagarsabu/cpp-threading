@@ -91,6 +91,7 @@ void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
     });
 }
 
+// cppcheck-suppress unusedFunction
 void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta)
 {
     auto itr = m_timers.find(timerEventId);
@@ -132,6 +133,7 @@ void Thread::StartTimer(TimerEvent::EventID timerEventId) const
     itr->second->Start();
 }
 
+// cppcheck-suppress unusedFunction
 void Thread::StopTimer(TimerEvent::EventID timerEventId) const
 {
     auto itr = m_timers.find(timerEventId);
@@ -144,7 +146,6 @@ void Thread::StopTimer(TimerEvent::EventID timerEventId) const
     LOG_DEBUG("%s stop-timer timer-event-id:%d timer-name:%s", Name(), timerEventId, itr->second->Name());
     itr->second->Stop();
 }
-
 
 int Thread::Execute()
 {
@@ -246,7 +247,7 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
         return;
     }
 
-    auto& event = static_cast<SelfEvent&>(*threadEvent);
+    const auto& event = static_cast<const SelfEvent&>(*threadEvent);
     switch (event.Type())
     {
         case SelfEvent::Exit:

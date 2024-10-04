@@ -1,12 +1,12 @@
 #include <cstdarg>
 #include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <mutex>
-#include <sstream>
-#include <iomanip>
 #include <thread>
 #include <fstream>
 #include <filesystem>
+#include <format>
 
 #include "log/logger.hpp"
 #include "timers/timer.hpp"
@@ -19,39 +19,39 @@ namespace Logger
 
 // Formatter control
 
-constexpr char FORMAT_END[] = "\x1B[00m";
-constexpr char FORMAT_BOLD[] = "\x1B[01m";
-constexpr char FORMAT_DISABLED[] = "\x1B[02m";
-constexpr char FORMAT_ITALIC[] = "\x1B[03m";
-constexpr char FORMAT_URL[] = "\x1B[04m";
-constexpr char FORMAT_BLINK[] = "\x1B[05m";
-constexpr char FORMAT_BLINK2[] = "\x1B[06m";
-constexpr char FORMAT_SELECTED[] = "\x1B[07m";
-constexpr char FORMAT_INVISIBLE[] = "\x1B[08m";
-constexpr char FORMAT_STRIKE[] = "\x1B[09m";
-constexpr char FORMAT_DOUBLE_UNDERLINE[] = "\x1B[21m";
+constexpr std::string_view FORMAT_END{ "\x1B[00m" };
+constexpr std::string_view FORMAT_BOLD{ "\x1B[01m" };
+constexpr std::string_view FORMAT_DISABLED{ "\x1B[02m" };
+constexpr std::string_view FORMAT_ITALIC{ "\x1B[03m" };
+constexpr std::string_view FORMAT_URL{ "\x1B[04m" };
+constexpr std::string_view FORMAT_BLINK{ "\x1B[05m" };
+constexpr std::string_view FORMAT_BLINK2{ "\x1B[06m" };
+constexpr std::string_view FORMAT_SELECTED{ "\x1B[07m" };
+constexpr std::string_view FORMAT_INVISIBLE{ "\x1B[08m" };
+constexpr std::string_view FORMAT_STRIKE{ "\x1B[09m" };
+constexpr std::string_view FORMAT_DOUBLE_UNDERLINE{ "\x1B[21m" };
 
 // Dark Colours
 
-constexpr char DARK_BLACK[] = "\x1B[30m";
-constexpr char DARK_RED[] = "\x1B[31m";
-constexpr char DARK_GREEN[] = "\x1B[32m";
-constexpr char DARK_YELLOW[] = "\x1B[33m";
-constexpr char DARK_BLUE[] = "\x1B[34m";
-constexpr char DARK_VIOLET[] = "\x1B[35m";
-constexpr char DARK_BEIGE[] = "\x1B[36m";
-constexpr char DARK_WHITE[] = "\x1B[37m";
+constexpr std::string_view DARK_BLACK{ "\x1B[30m" };
+constexpr std::string_view DARK_RED{ "\x1B[31m" };
+constexpr std::string_view DARK_GREEN{ "\x1B[32m" };
+constexpr std::string_view DARK_YELLOW{ "\x1B[33m" };
+constexpr std::string_view DARK_BLUE{ "\x1B[34m" };
+constexpr std::string_view DARK_VIOLET{ "\x1B[35m" };
+constexpr std::string_view DARK_BEIGE{ "\x1B[36m" };
+constexpr std::string_view DARK_WHITE{ "\x1B[37m" };
 
 // Light Colours
 
-constexpr char LIGHT_GREY[] = "\x1B[90m";
-constexpr char LIGHT_RED[] = "\x1B[91m";
-constexpr char LIGHT_GREEN[] = "\x1B[92m";
-constexpr char LIGHT_YELLOW[] = "\x1B[93m";
-constexpr char LIGHT_BLUE[] = "\x1B[94m";
-constexpr char LIGHT_VIOLET[] = "\x1B[95m";
-constexpr char LIGHT_BEIGE[] = "\x1B[96m";
-constexpr char LIGHT_WHITE[] = "\x1B[97m";
+constexpr std::string_view LIGHT_GREY{ "\x1B[90m" };
+constexpr std::string_view LIGHT_RED{ "\x1B[91m" };
+constexpr std::string_view LIGHT_GREEN{ "\x1B[92m" };
+constexpr std::string_view LIGHT_YELLOW{ "\x1B[93m" };
+constexpr std::string_view LIGHT_BLUE{ "\x1B[94m" };
+constexpr std::string_view LIGHT_VIOLET{ "\x1B[95m" };
+constexpr std::string_view LIGHT_BEIGE{ "\x1B[96m" };
+constexpr std::string_view LIGHT_WHITE{ "\x1B[97m" };
 
 // Helper classes / structs
 
@@ -208,7 +208,13 @@ struct LogTimestamp
             m_timeSpec.tv_sec++;
         }
 
-        std::strftime(m_secondsBuffer, sizeof(m_secondsBuffer), "%d-%m-%Y %H:%M:%S", std::localtime(&m_timeSpec.tv_sec));
+        std::tm localTimeRes{};
+        std::strftime(
+            m_secondsBuffer,
+            sizeof(m_secondsBuffer),
+            "%d-%m-%Y %H:%M:%S",
+            ::localtime_r(&m_timeSpec.tv_sec, &localTimeRes)
+        );
         snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03u", millisec);
     }
 
@@ -224,7 +230,7 @@ private:
 
 // Global variables
 
-constexpr std::array<const char*, Level::Critical + 1> LEVEL_COLOURS
+constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_COLOURS
 {
     LIGHT_GREEN,    // Level::Trace
     DARK_BLUE,      // Level::Debug
@@ -234,7 +240,7 @@ constexpr std::array<const char*, Level::Critical + 1> LEVEL_COLOURS
     DARK_RED,       // Level::Critical
 };
 
-constexpr std::array<const char*, Level::Critical + 1> LEVEL_INFOS
+constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_NAMES
 {
     "TRACE",        // Level::Trace
     "DEBUG",        // Level::Debug
@@ -252,7 +258,7 @@ Level g_currentLogLevel{ Level::Info };
 */
 LogStreamer* const g_logStreamer{ new LogStreamer };
 
-const thread_local std::string g_threadName{ Internal::LogFriendlyGetThreadName() };
+const thread_local std::string g_threadName{ Internal::LogFriendlyThreadName() };
 
 // Functions
 
@@ -263,9 +269,9 @@ void SetupLogger(const std::string& filename)
     g_logStreamer->Setup(filename);
 }
 
-constexpr const char* GetLevelFormatter(Level level) noexcept { return LEVEL_COLOURS[level]; }
+constexpr std::string_view GetLevelFormatter(Level level) noexcept { return LEVEL_COLOURS[level]; }
 
-constexpr const char* GetLevelInfo(Level level) noexcept { return LEVEL_INFOS[level]; }
+constexpr std::string_view GetLevelName(Level level) noexcept { return LEVEL_NAMES[level]; }
 
 void LogToStream(Level level, const char* fmt, va_list args)
 {
@@ -282,7 +288,7 @@ void LogToStream(Level level, const char* fmt, va_list args)
             << GetLevelFormatter(level)
             << '[' << ts.getSecondsBuffer() << ts.getMilliSecBuffer() << "] "
             << '[' << g_threadName << "] "
-            << '[' << GetLevelInfo(level) << "] "
+            << '[' << GetLevelName(level) << "] "
             << msgBuff
             << FORMAT_END << '\n';
         std::flush(stream);
@@ -292,55 +298,55 @@ void LogToStream(Level level, const char* fmt, va_list args)
 namespace Internal
 {
 
-void Trace(const char* msg, ...)
+void Trace(const char* fmt, ...)
 {
     va_list args;
-    va_start(args, msg);
-    Logger::LogToStream(Logger::Trace, msg, args);
+    va_start(args, fmt);
+    Logger::LogToStream(Logger::Trace, fmt, args);
     va_end(args);
 }
 
-void Debug(const char* msg, ...)
+void Debug(const char* fmt, ...)
 {
     va_list args;
-    va_start(args, msg);
-    Logger::LogToStream(Logger::Debug, msg, args);
+    va_start(args, fmt);
+    Logger::LogToStream(Logger::Debug, fmt, args);
     va_end(args);
 }
 
-void Info(const char* msg, ...)
+void Info(const char* fmt, ...)
 {
     va_list args;
-    va_start(args, msg);
-    Logger::LogToStream(Logger::Info, msg, args);
+    va_start(args, fmt);
+    Logger::LogToStream(Logger::Info, fmt, args);
     va_end(args);
 }
 
-void Warning(const char* msg, ...)
+void Warning(const char* fmt, ...)
 {
     va_list args;
-    va_start(args, msg);
-    Logger::LogToStream(Logger::Warning, msg, args);
+    va_start(args, fmt);
+    Logger::LogToStream(Logger::Warning, fmt, args);
     va_end(args);
 }
 
-void Error(const char* msg, ...)
+void Error(const char* fmt, ...)
 {
     va_list args;
-    va_start(args, msg);
-    Logger::LogToStream(Logger::Error, msg, args);
+    va_start(args, fmt);
+    Logger::LogToStream(Logger::Error, fmt, args);
     va_end(args);
 }
 
-void Critical(const char* msg, ...)
+void Critical(const char* fmt, ...)
 {
     va_list args;
-    va_start(args, msg);
-    Logger::LogToStream(Logger::Critical, msg, args);
+    va_start(args, fmt);
+    Logger::LogToStream(Logger::Critical, fmt, args);
     va_end(args);
 }
 
-std::string LogFriendlyGetThreadName()
+std::string LogFriendlyThreadName()
 {
     // Max allowed buffer for POSIX thread name
     using ThreadNameBuffer = char[16];
@@ -348,9 +354,9 @@ std::string LogFriendlyGetThreadName()
     ThreadNameBuffer threadName;
     pthread_getname_np(pthread_self(), threadName, sizeof(threadName));
 
-    std::ostringstream oss;
-    oss << std::left << std::setw(sizeof(threadName)) << threadName;
-    return oss.str();
+    // centered thread name output
+    const std::string fmt{ "{:^" + std::to_string(sizeof(threadName)) + "s}" };
+    return std::vformat(fmt, std::make_format_args(threadName));
 }
 
 bool ShouldLog(Level level) noexcept { return level >= g_currentLogLevel; }

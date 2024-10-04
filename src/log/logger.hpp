@@ -43,7 +43,7 @@ void Error(const char* msg, ...);
 [[gnu::format(printf, 1, 2)]]
 void Critical(const char* msg, ...);
 
-std::string LogFriendlyGetThreadName();
+std::string LogFriendlyThreadName();
 
 bool ShouldLog(Level level) noexcept;
 

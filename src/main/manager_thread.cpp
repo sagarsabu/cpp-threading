@@ -175,7 +175,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
     {
         case EventReceiver::Timer:
         {
-            auto& event = static_cast<TimerEvent&>(*threadEvent);
+            const auto& event = static_cast<const TimerEvent&>(*threadEvent);
             switch (event.Type())
             {
                 case ManagerTimerEvent::TransmitWork:
@@ -197,7 +197,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
         case EventReceiver::ManagerThread:
         {
 
-            auto& event = static_cast<ManagerEvent&>(*threadEvent);
+            const auto& event = static_cast<const ManagerEvent&>(*threadEvent);
             switch (event.Type())
             {
                 case ManagerEvent::Shutdown:
