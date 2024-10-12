@@ -111,13 +111,12 @@ int main(int argc, char** const argv)
         auto [logLevel, logFile] { GetCLiArgs(argc, argv) };
 
         // Setup logging
-        Logger::SetupLogger(logFile);
-        Logger::SetLogLevel(logLevel);
+        Logger::SetupLogger(logFile, logLevel);
 
         LOG_INFO("==== starting ====");
 
         Threading::ManagerThread* managerPtr{ nullptr };
-        ExitHandler::AttachExitHandler([&managerPtr]
+        std::jthread exitHandler = ExitHandler::Create([&managerPtr]
         {
             LOG_INFO("exit-handle triggered");
             if (managerPtr != nullptr)
@@ -142,6 +141,7 @@ int main(int argc, char** const argv)
         // Make sure main thread waits until shutdown is complete
         manager.WaitForShutdown();
         res = manager.ExitCode();
+        exitHandler.request_stop();
     }
     catch (const std::exception& e)
     {

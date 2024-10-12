@@ -62,9 +62,10 @@ public:
 
     LogStreamer() = default;
 
-    void Setup(const std::string& filename)
+    void Setup(const std::string& filename, Level level)
     {
         m_logFilename = filename;
+        m_logLevel = level;
 
         if (m_logFilename.empty())
         {
@@ -102,6 +103,8 @@ public:
             LOG_CRITICAL("==== failed to setup file logger. what: %s ====", e.what());
         }
     }
+
+    Level GetLogLevel() const noexcept { return m_logLevel; }
 
 private:
     // Nothing in here is movable or copyable
@@ -182,6 +185,7 @@ private:
     std::reference_wrapper<Stream> m_streamRef{ s_consoleStream };
     std::recursive_mutex m_mutex{};
     std::string m_logFilename{};
+    Level m_logLevel{ Level::Info };
     size_t m_lostLogTime{ 0 };
     std::ofstream m_logFileStream{};
     std::unique_ptr<PeriodicTimer> m_logFileCreator{ nullptr };
@@ -225,7 +229,7 @@ struct LogTimestamp
 private:
     SecondsBuffer m_secondsBuffer;
     MilliSecBuffer m_msSecBuff;
-    ::timespec m_timeSpec;
+    timespec m_timeSpec;
 };
 
 // Global variables
@@ -250,8 +254,6 @@ constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_NAMES
     "CRIT ",        // Level::Critical
 };
 
-Level g_currentLogLevel{ Level::Info };
-
 /**
  * Intentionally leaking here.
  * Logging in global object destructor's may cause issue if we destroy the logger
@@ -262,11 +264,9 @@ const thread_local std::string g_threadName{ Internal::LogFriendlyThreadName() }
 
 // Functions
 
-void SetLogLevel(Level logLevel) { g_currentLogLevel = logLevel; }
-
-void SetupLogger(const std::string& filename)
+void SetupLogger(const std::string& filename, Level logLevel)
 {
-    g_logStreamer->Setup(filename);
+    g_logStreamer->Setup(filename, logLevel);
 }
 
 constexpr std::string_view GetLevelFormatter(Level level) noexcept { return LEVEL_COLOURS[level]; }
@@ -276,6 +276,9 @@ constexpr std::string_view GetLevelName(Level level) noexcept { return LEVEL_NAM
 void LogToStream(Level level, const char* fmt, va_list args)
 {
     using MsgBuffer = char[1024];
+
+    if (not Internal::ShouldLog(level))
+        return;
 
     LogTimestamp ts;
     MsgBuffer msgBuff;
@@ -355,11 +358,10 @@ std::string LogFriendlyThreadName()
     pthread_getname_np(pthread_self(), threadName, sizeof(threadName));
 
     // centered thread name output
-    const std::string fmt{ "{:^" + std::to_string(sizeof(threadName)) + "s}" };
-    return std::vformat(fmt, std::make_format_args(threadName));
+    return std::format("{:^16s}", threadName);
 }
 
-bool ShouldLog(Level level) noexcept { return level >= g_currentLogLevel; }
+bool ShouldLog(Level level) noexcept { return level >= g_logStreamer->GetLogLevel(); }
 
 } // namespace Internal
 

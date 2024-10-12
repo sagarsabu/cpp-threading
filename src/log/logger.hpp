@@ -18,9 +18,7 @@ enum Level
     Critical
 };
 
-void SetLogLevel(Level logLevel);
-
-void SetupLogger(const std::string& filename = "");
+void SetupLogger(const std::string& filename = "", Level logLevel = Level::Info);
 
 namespace Internal
 {
@@ -55,11 +53,11 @@ bool ShouldLog(Level level) noexcept;
 
 // Log marcos for lazy va args evaluation
 
-#define LOG_TRACE(fmt, ...) if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Trace)) Sage::Logger::Internal::Trace(fmt, ## __VA_ARGS__)
+#define LOG_TRACE(fmt, ...) if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Trace)) [[unlikely]] Sage::Logger::Internal::Trace(fmt, ## __VA_ARGS__)
 
-#define LOG_DEBUG(fmt, ...) if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Debug)) Sage::Logger::Internal::Debug(fmt, ## __VA_ARGS__)
+#define LOG_DEBUG(fmt, ...) if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Debug)) [[unlikely]] Sage::Logger::Internal::Debug(fmt, ## __VA_ARGS__)
 
-#define LOG_INFO(fmt, ...) if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Info)) Sage::Logger::Internal::Info(fmt, ## __VA_ARGS__)
+#define LOG_INFO(fmt, ...) Sage::Logger::Internal::Info(fmt, ## __VA_ARGS__)
 
 #define LOG_WARNING(fmt, ...) Sage::Logger::Internal::Warning(fmt, ## __VA_ARGS__)
 

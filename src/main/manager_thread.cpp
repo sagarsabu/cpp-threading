@@ -100,7 +100,7 @@ void ManagerThread::SendEventsToWorkers()
 {
     std::lock_guard lock{ m_workersMtx };
 
-    if (m_workersTerminated)
+    if (m_workersTerminated) [[unlikely]]
     {
         LOG_WARNING("%s workers terminated", Name());
         return;

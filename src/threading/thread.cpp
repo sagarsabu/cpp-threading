@@ -78,13 +78,13 @@ void Thread::TransmitEvent(UniqueThreadEvent event)
 void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr != m_timers.end()) [[unlikely]]
+    if (itr != m_timers.end())
     {
         LOG_ERROR("%s add-periodic-timer timer-event-id:%d already exists", Name(), timerEventId);
         return;
     }
 
-    const std::string& timerName{ m_threadName + "-Periodic-" + std::to_string(timerEventId) };
+    const std::string timerName{ m_threadName + "-Periodic-" + std::to_string(timerEventId) };
     m_timers[timerEventId] = std::make_unique<PeriodicTimer>(timerName, period, [this, timerEventId]
     {
         TransmitEvent(std::make_unique<TimerEvent>(timerEventId));
@@ -95,13 +95,13 @@ void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
 void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta)
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr != m_timers.end()) [[unlikely]]
+    if (itr != m_timers.end())
     {
         LOG_ERROR("%s add-fire-once-timer timer-event-id:%d already exists", Name(), timerEventId);
         return;
     }
 
-    const std::string& timerName{ m_threadName + "-FireOnce-" + std::to_string(timerEventId) };
+    const std::string timerName{ m_threadName + "-FireOnce-" + std::to_string(timerEventId) };
     m_timers[timerEventId] = std::make_unique<FireOnceTimer>(timerName, delta, [this, timerEventId]
     {
         TransmitEvent(std::make_unique<TimerEvent>(timerEventId));
@@ -111,7 +111,7 @@ void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta)
 void Thread::RemoveTimer(TimerEvent::EventID timerEventId)
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end()) [[unlikely]]
+    if (itr == m_timers.end())
     {
         LOG_ERROR("%s remove-timer timer-event-id:%d does not exist", Name(), timerEventId);
         return;
@@ -123,7 +123,7 @@ void Thread::RemoveTimer(TimerEvent::EventID timerEventId)
 void Thread::StartTimer(TimerEvent::EventID timerEventId) const
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end()) [[unlikely]]
+    if (itr == m_timers.end())
     {
         LOG_ERROR("%s start-timer timer-event-id:%d does not exist", Name(), timerEventId);
         return;
@@ -137,7 +137,7 @@ void Thread::StartTimer(TimerEvent::EventID timerEventId) const
 void Thread::StopTimer(TimerEvent::EventID timerEventId) const
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end()) [[unlikely]]
+    if (itr == m_timers.end())
     {
         LOG_ERROR("%s stop-timer timer-event-id:%d does not exist", Name(), timerEventId);
         return;
@@ -200,11 +200,11 @@ void Thread::ProcessEvents()
             m_eventQueue.pop();
         }
 
-        if (threadEvent == nullptr)
+        if (threadEvent == nullptr) [[unlikely]]
         {
             LOG_ERROR("%s process-events received null event for receiver", Name());
         }
-        else [[likely]]
+        else
         {
             switch (threadEvent->Receiver())
             {

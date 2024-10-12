@@ -21,10 +21,10 @@ using TimeS = std::chrono::seconds;
 
 // Helpers
 
-constexpr timespec NanoSecsToTimeSpec(const TimeNS& duration)
+constexpr timespec ChronoTimeToTimeSpec(const TimeNS& duration) noexcept
 {
-    const TimeS& seconds = std::chrono::duration_cast<TimeS>(duration);
-    const TimeNS& nanoSecs = duration;
+    const TimeS& seconds{ std::chrono::duration_cast<TimeS>(duration) };
+    const TimeNS& nanoSecs{ duration };
     return timespec{ seconds.count(), (nanoSecs - seconds).count() };
 }
 
@@ -67,8 +67,8 @@ private:
 
 private:
     static constexpr itimerspec DISABLED_TIMER{
-        .it_interval = {.tv_sec = 0, .tv_nsec = 0 },
-        .it_value = {.tv_sec = 0, .tv_nsec = 0 }
+        .it_interval = ChronoTimeToTimeSpec(0ns),
+        .it_value = ChronoTimeToTimeSpec(0ns)
     };
 };
 

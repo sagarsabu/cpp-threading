@@ -10,7 +10,7 @@ namespace Sage
 // Base timer
 
 Timer::Timer(const std::string& name, const TimeNS& startDelta, const TimeNS& period, TimerCallback&& callback) :
-    m_timerInterval{ .it_interval = NanoSecsToTimeSpec(period), .it_value = NanoSecsToTimeSpec(startDelta) },
+    m_timerInterval{ .it_interval = ChronoTimeToTimeSpec(period), .it_value = ChronoTimeToTimeSpec(startDelta) },
     m_callback{ std::move(callback) },
     m_name{ name },
     m_signalData{ .m_theTimer = *this }

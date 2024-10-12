@@ -27,7 +27,7 @@ public:
 
     virtual ~Thread();
 
-    const char* Name() const { return m_threadName.c_str(); }
+    const char* Name() const noexcept { return m_threadName.c_str(); }
 
     void Start();
 
@@ -35,9 +35,9 @@ public:
 
     void TransmitEvent(UniqueThreadEvent event);
 
-    int ExitCode() const { return m_exitCode; }
+    int ExitCode() const noexcept { return m_exitCode; }
 
-    bool IsRunning() const { return m_running; }
+    bool IsRunning() const noexcept { return m_running; }
 
 protected:
     virtual void Starting() { }
@@ -77,16 +77,16 @@ private:
 private:
     const std::string m_threadName;
     std::jthread m_thread;
+    std::binary_semaphore m_eventSignal{ 0 };
     std::mutex m_eventQueueMtx{};
     std::queue<UniqueThreadEvent> m_eventQueue{};
-    std::binary_semaphore m_eventSignal{ 0 };
+    const TimeMS m_handleEventThreshold;
+    std::unordered_map<TimerEvent::EventID, std::unique_ptr<Timer>> m_timers{};
     std::atomic<int> m_exitCode{ 0 };
     std::latch m_startLatch{ 1 };
     std::atomic<bool> m_running{ false };
     std::atomic<bool> m_stopping{ false };
     std::unique_ptr<FireOnceTimer> m_stopTimer{ nullptr };
-    std::unordered_map<TimerEvent::EventID, std::unique_ptr<Timer>> m_timers{};
-    const TimeMS m_handleEventThreshold;
 
 private:
     static constexpr size_t MAX_EVENTS_PER_LOOP{ 10 };

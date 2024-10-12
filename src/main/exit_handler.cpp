@@ -9,20 +9,20 @@
 namespace Sage::ExitHandler
 {
 
-void AttachExitHandler(ExitHandle&& theExitHandle)
+std::jthread Create(ExitHandle&& theExitHandle)
 {
     static bool attached{ false };
     if (attached)
     {
         LOG_CRITICAL("exit handler has already been attached");
-        std::raise(SIGKILL);
+        std::exit(1);
     }
-
+    attached = true;
 
     sigset_t signalsToBlock{};
     sigemptyset(&signalsToBlock);
 
-    const std::array exitSignals{ SIGINT, SIGQUIT, SIGHUP, SIGTERM };
+    constexpr std::array exitSignals{ SIGINT, SIGQUIT, SIGHUP, SIGTERM };
     for (auto sig : exitSignals)
     {
         sigaddset(&signalsToBlock, sig);
@@ -31,18 +31,14 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
     if (pthread_sigmask(SIG_BLOCK, &signalsToBlock, nullptr) != 0)
     {
         LOG_CRITICAL("failed to block exit signals. e: %s", strerror(errno));
-    }
-    else
-    {
-        LOG_INFO("successfully blocked exit signals");
+        std::exit(1);
     }
 
-    std::thread([exitHandle = std::move(theExitHandle), signalsToBlock = std::move(signalsToBlock)]
+    LOG_INFO("successfully blocked exit signals");
+
+    auto handler = [exitHandle = std::move(theExitHandle), signalsToBlock = std::move(signalsToBlock)](std::stop_token stopToken) -> void
     {
         pthread_setname_np(pthread_self(), "ExitHandler");
-
-        int receivedSignal{ 0 };
-        bool triggered{ false };
 
         constexpr auto shutdownThreshold{ 5s };
         constexpr auto shutdownTick{ 500ms };
@@ -66,15 +62,30 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
 
         LOG_INFO("exit-handler waiting for exit signal");
 
-        while (true)
+        bool triggered{ false };
+        constexpr timespec sigWaitTimeout{ ChronoTimeToTimeSpec(100ms) };
+
+        while (not stopToken.stop_requested())
         {
-            if (sigwait(&signalsToBlock, &receivedSignal) != 0)
+            int signalOrTimeout{ sigtimedwait(&signalsToBlock, nullptr, &sigWaitTimeout) };
+            if (signalOrTimeout == -1)
             {
-                LOG_CRITICAL("sigwait failed when waiting for exit. e: %s", strerror(errno));
+                int err{ errno };
+                switch (err)
+                {
+                    // timeout
+                    case EAGAIN:
+                        break;
+
+                    default:
+                        LOG_CRITICAL("sigwait failed when waiting for exit. e: %s", strerror(err));
+                        break;
+                }
+
                 continue;
             }
 
-            switch (receivedSignal)
+            switch (signalOrTimeout)
             {
                 case SIGINT:
                 case SIGQUIT:
@@ -84,12 +95,12 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
                     if (not triggered)
                     {
                         triggered = true;
-                        LOG_INFO("exit-handler received signal '%s'. triggering exit-handle.", strsignal(receivedSignal));
+                        LOG_INFO("exit-handler received signal '%s'. triggering exit-handle.", strsignal(signalOrTimeout));
                         shutdownTimer.Start();
                     }
                     else
                     {
-                        LOG_CRITICAL("exit-handler received additional signal '%s'. triggering exit-handle again.", strsignal(receivedSignal));
+                        LOG_CRITICAL("exit-handler received additional signal '%s'. triggering exit-handle again.", strsignal(signalOrTimeout));
                     }
 
                     exitHandle();
@@ -98,12 +109,14 @@ void AttachExitHandler(ExitHandle&& theExitHandle)
 
                 default:
                 {
-                    LOG_CRITICAL("got unexpected signal:%d", receivedSignal);
+                    LOG_CRITICAL("got unexpected signal '%s'", strsignal(signalOrTimeout));
                     break;
                 }
             }
         }
-    }).detach();
+    };
+
+    return std::jthread{ std::move(handler) };
 }
 
 } // namespace Sage::ExitHandler

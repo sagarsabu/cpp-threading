@@ -8,6 +8,6 @@ namespace Sage::ExitHandler
 
 using ExitHandle = std::function<void()>;
 
-void AttachExitHandler(ExitHandle&& theExitHandle);
+std::jthread Create(ExitHandle&& theExitHandle);
 
 } // namespace Sage::ExitHandler
