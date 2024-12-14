@@ -23,8 +23,8 @@ using TimeS = std::chrono::seconds;
 
 constexpr timespec ChronoTimeToTimeSpec(const TimeNS& duration) noexcept
 {
-    const TimeS& seconds{ std::chrono::duration_cast<TimeS>(duration) };
-    const TimeNS& nanoSecs{ duration };
+    const TimeS seconds{ std::chrono::duration_cast<TimeS>(duration) };
+    const TimeNS nanoSecs{ duration };
     return timespec{ seconds.count(), (nanoSecs - seconds).count() };
 }
 
@@ -72,7 +72,7 @@ private:
     };
 };
 
-// Fire once timer. Has be restarted
+// Fire once timer. Has to be restarted
 
 class FireOnceTimer final : public Timer
 {

@@ -197,21 +197,12 @@ struct LogTimestamp
 {
     // e.g "01 - 09 - 2023 00:42 : 19"
     using SecondsBuffer = char[26];
-    // :%03u requires 7 bytes max
-    using MilliSecBuffer = char[7];
+    // :%09lu requires 22 bytes max
+    using NanoSecBuffer = char[22];
 
     LogTimestamp() noexcept
     {
         std::timespec_get(&m_timeSpec, TIME_UTC);
-
-        uint16_t millisec = static_cast<uint16_t>(m_timeSpec.tv_nsec / 1'000'000U);
-        // incase of overflow
-        if (millisec >= 1000U)
-        {
-            millisec = static_cast<uint16_t>(millisec - 1000U);
-            m_timeSpec.tv_sec++;
-        }
-
         std::tm localTimeRes{};
         std::strftime(
             m_secondsBuffer,
@@ -219,16 +210,16 @@ struct LogTimestamp
             "%d-%m-%Y %H:%M:%S",
             ::localtime_r(&m_timeSpec.tv_sec, &localTimeRes)
         );
-        snprintf(m_msSecBuff, sizeof(m_msSecBuff), ":%03u", millisec);
+        snprintf(m_extraSecBuff, sizeof(m_extraSecBuff), ":%09lu", m_timeSpec.tv_nsec);
     }
 
     constexpr const SecondsBuffer& getSecondsBuffer() const noexcept { return m_secondsBuffer; };
 
-    constexpr const MilliSecBuffer& getMilliSecBuffer() const noexcept { return m_msSecBuff; };
+    constexpr const NanoSecBuffer& getMilliSecBuffer() const noexcept { return m_extraSecBuff; };
 
 private:
     SecondsBuffer m_secondsBuffer;
-    MilliSecBuffer m_msSecBuff;
+    NanoSecBuffer m_extraSecBuff;
     timespec m_timeSpec;
 };
 
