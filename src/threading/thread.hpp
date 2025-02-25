@@ -27,7 +27,7 @@ public:
 
     virtual ~Thread();
 
-    const char* Name() const noexcept { return m_threadName.c_str(); }
+    const std::string& Name() const noexcept { return m_threadName; }
 
     void Start();
 

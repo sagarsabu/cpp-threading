@@ -13,17 +13,17 @@ Thread::Thread(const std::string& threadName, const TimeMS& handleEventThreshold
     m_thread{ &Thread::Enter, this },
     m_handleEventThreshold{ handleEventThreshold }
 {
-    LOG_DEBUG("%s c'tor", Name());
+    LOG_DEBUG("{} c'tor", Name());
 }
 
 Thread::~Thread()
 {
-    LOG_DEBUG("%s d'tor", Name());
+    LOG_DEBUG("{} d'tor", Name());
 }
 
 void Thread::Start()
 {
-    LOG_INFO("%s start requested", Name());
+    LOG_INFO("{} start requested", Name());
     m_startLatch.count_down();
 }
 
@@ -32,23 +32,23 @@ void Thread::Stop()
     // Hold the lock so no other events can come in
     std::lock_guard lock{ m_eventQueueMtx };
 
-    LOG_INFO("%s stop requested", Name());
+    LOG_INFO("{} stop requested", Name());
 
     if (m_stopping)
     {
-        LOG_CRITICAL("%s stop requested when already stopping", Name());
+        LOG_CRITICAL("{} stop requested when already stopping", Name());
         return;
     }
 
     // Clear anything in the queue so we get a faster exit
     if (not m_eventQueue.empty())
     {
-        LOG_WARNING("%s flushing %ld events", Name(), m_eventQueue.size());
+        LOG_WARNING("{} flushing {} events", Name(), m_eventQueue.size());
         while (not m_eventQueue.empty())
         {
             m_eventQueue.pop();
         }
-        LOG_TRACE("%s flushed all events", Name());
+        LOG_TRACE("{} flushed all events", Name());
     }
 
     m_eventQueue.emplace(std::make_unique<ExitEvent>());
@@ -62,7 +62,7 @@ void Thread::TransmitEvent(UniqueThreadEvent event)
 {
     if (m_stopping) [[unlikely]]
     {
-        LOG_CRITICAL("%s transmit-event dropped event for receiver:%s",
+        LOG_CRITICAL("{} transmit-event dropped event for receiver:{}",
             Name(), event->ReceiverName());
         return;
     }
@@ -80,7 +80,7 @@ void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
     auto itr = m_timers.find(timerEventId);
     if (itr != m_timers.end())
     {
-        LOG_ERROR("%s add-periodic-timer timer-event-id:%d already exists", Name(), timerEventId);
+        LOG_ERROR("{} add-periodic-timer timer-event-id:{} already exists", Name(), timerEventId);
         return;
     }
 
@@ -97,7 +97,7 @@ void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta)
     auto itr = m_timers.find(timerEventId);
     if (itr != m_timers.end())
     {
-        LOG_ERROR("%s add-fire-once-timer timer-event-id:%d already exists", Name(), timerEventId);
+        LOG_ERROR("{} add-fire-once-timer timer-event-id:{} already exists", Name(), timerEventId);
         return;
     }
 
@@ -113,7 +113,7 @@ void Thread::RemoveTimer(TimerEvent::EventID timerEventId)
     auto itr = m_timers.find(timerEventId);
     if (itr == m_timers.end())
     {
-        LOG_ERROR("%s remove-timer timer-event-id:%d does not exist", Name(), timerEventId);
+        LOG_ERROR("{} remove-timer timer-event-id:{} does not exist", Name(), timerEventId);
         return;
     }
 
@@ -125,11 +125,11 @@ void Thread::StartTimer(TimerEvent::EventID timerEventId) const
     auto itr = m_timers.find(timerEventId);
     if (itr == m_timers.end())
     {
-        LOG_ERROR("%s start-timer timer-event-id:%d does not exist", Name(), timerEventId);
+        LOG_ERROR("{} start-timer timer-event-id:{} does not exist", Name(), timerEventId);
         return;
     }
 
-    LOG_DEBUG("%s start-timer timer-event-id:%d timer-name:%s", Name(), timerEventId, itr->second->Name());
+    LOG_DEBUG("{} start-timer timer-event-id:{} timer-name:{}", Name(), timerEventId, itr->second->Name());
     itr->second->Start();
 }
 
@@ -139,11 +139,11 @@ void Thread::StopTimer(TimerEvent::EventID timerEventId) const
     auto itr = m_timers.find(timerEventId);
     if (itr == m_timers.end())
     {
-        LOG_ERROR("%s stop-timer timer-event-id:%d does not exist", Name(), timerEventId);
+        LOG_ERROR("{} stop-timer timer-event-id:{} does not exist", Name(), timerEventId);
         return;
     }
 
-    LOG_DEBUG("%s stop-timer timer-event-id:%d timer-name:%s", Name(), timerEventId, itr->second->Name());
+    LOG_DEBUG("{} stop-timer timer-event-id:{} timer-name:{}", Name(), timerEventId, itr->second->Name());
     itr->second->Stop();
 }
 
@@ -154,7 +154,7 @@ int Thread::Execute()
     // Will be execute on this thread via exit event handling
     std::stop_callback stopCb(stopToken, [this, &readyToExit]
     {
-        LOG_INFO("%s stop callback triggered", Name());
+        LOG_INFO("{} stop callback triggered", Name());
 
         readyToExit = true;
         // notify ourselves to wake up
@@ -202,7 +202,7 @@ void Thread::ProcessEvents()
 
         if (threadEvent == nullptr) [[unlikely]]
         {
-            LOG_ERROR("%s process-events received null event for receiver", Name());
+            LOG_ERROR("{} process-events received null event for receiver", Name());
         }
         else
         {
@@ -228,13 +228,13 @@ void Thread::ProcessEvents()
     if (tooManyEvents)
     {
         // More to do on next loop so notify ourselves
-        LOG_WARNING("%s process-events max events exceeded threshold:%ld events-this-loop:%ld n-received-events:%ld",
+        LOG_WARNING("{} process-events max events exceeded threshold:{} events-this-loop:{} n-received-events:{}",
             Name(), MAX_EVENTS_PER_LOOP, eventsForThisLoop, eventsQueued);
         m_eventSignal.release();
     }
     else
     {
-        LOG_TRACE("%s process-events n-received-events:%ld", Name(), eventsForThisLoop);
+        LOG_TRACE("{} process-events n-received-events:{}", Name(), eventsForThisLoop);
     }
 }
 
@@ -242,7 +242,7 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
 {
     if (threadEvent->Receiver() != EventReceiver::Self) [[unlikely]]
     {
-        LOG_CRITICAL("%s handle-self-event got event from unexpected receiver:%s",
+        LOG_CRITICAL("{} handle-self-event got event from unexpected receiver:{}",
             Name(), threadEvent->ReceiverName());
         return;
     }
@@ -252,17 +252,17 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
     {
         case SelfEvent::Exit:
         {
-            LOG_INFO("%s received exit event. requesting stop.", Name());
+            LOG_INFO("{} received exit event. requesting stop.", Name());
             // Trigger via timer so we return out of the main processing loop
             m_stopTimer = std::make_unique<FireOnceTimer>(m_threadName + "-ExitTimer", 1ms, [this]
             {
                 if (m_thread.request_stop())
                 {
-                    LOG_INFO("%s stop request has been executed", Name());
+                    LOG_INFO("{} stop request has been executed", Name());
                 }
                 else
                 {
-                    LOG_CRITICAL("%s stop request failed to executed", Name());
+                    LOG_CRITICAL("{} stop request failed to executed", Name());
                 }
             });
             m_stopTimer->Start();
@@ -271,8 +271,8 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
 
         default:
         {
-            LOG_ERROR("%s handle-event unknown event:%d",
-                Name(), event.Type());
+            LOG_ERROR("{} handle-event unknown event:{}",
+                Name(), (int) event.Type());
             break;
         }
     }
@@ -280,20 +280,20 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
 
 void Thread::Enter()
 {
-    pthread_setname_np(pthread_self(), Name());
+    pthread_setname_np(pthread_self(), Name().c_str());
 
     // For for start trigger
     m_startLatch.wait();
 
     m_running = true;
 
-    LOG_INFO("%s starting", Name());
+    LOG_INFO("{} starting", Name());
     Starting();
 
-    LOG_INFO("%s executing ", Name());
+    LOG_INFO("{} executing ", Name());
     m_exitCode = Execute();
 
-    LOG_INFO("%s stopping", Name());
+    LOG_INFO("{} stopping", Name());
     Stopping();
 
     m_running = false;

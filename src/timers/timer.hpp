@@ -41,7 +41,7 @@ public:
 
     void Stop() const;
 
-    const char* Name() const noexcept { return m_name.c_str(); };
+    const std::string& Name() const noexcept { return m_name; };
 
 protected:
     Timer(const std::string& name, const TimeNS& startDelta, const TimeNS& period, TimerCallback&& callback);

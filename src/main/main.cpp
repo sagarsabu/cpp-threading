@@ -145,7 +145,7 @@ int main(int argc, char** const argv)
     }
     catch (const std::exception& e)
     {
-        LOG_CRITICAL("caught unexpected std exception. what: %s. shutting down.", e.what());
+        LOG_CRITICAL("caught unexpected std exception. what:{}. shutting down.", e.what());
         res = 2;
     }
     catch (...)
@@ -154,6 +154,6 @@ int main(int argc, char** const argv)
         res = 1;
     }
 
-    LOG_INFO("==== terminating with return-code:%d ====", res);
+    LOG_INFO("==== terminating with return-code:{} ====", res);
     return res;
 }

@@ -30,7 +30,7 @@ std::jthread Create(ExitHandle&& theExitHandle)
 
     if (pthread_sigmask(SIG_BLOCK, &signalsToBlock, nullptr) != 0)
     {
-        LOG_CRITICAL("failed to block exit signals. e: %s", strerror(errno));
+        LOG_CRITICAL("failed to block exit signals. e: {}", strerror(errno));
         std::exit(1);
     }
 
@@ -56,7 +56,7 @@ std::jthread Create(ExitHandle&& theExitHandle)
             }
             else
             {
-                LOG_WARNING("shutdown duration at %ld ms", duration.count());
+                LOG_WARNING("shutdown duration at {}", duration);
             }
         });
 
@@ -78,7 +78,7 @@ std::jthread Create(ExitHandle&& theExitHandle)
                         break;
 
                     default:
-                        LOG_CRITICAL("sigwait failed when waiting for exit. e: %s", strerror(err));
+                        LOG_CRITICAL("sigwait failed when waiting for exit. e: {}", strerror(err));
                         break;
                 }
 
@@ -95,12 +95,12 @@ std::jthread Create(ExitHandle&& theExitHandle)
                     if (not triggered)
                     {
                         triggered = true;
-                        LOG_INFO("exit-handler received signal '%s'. triggering exit-handle.", strsignal(signalOrTimeout));
+                        LOG_INFO("exit-handler received signal '{}'. triggering exit-handle.", strsignal(signalOrTimeout));
                         shutdownTimer.Start();
                     }
                     else
                     {
-                        LOG_CRITICAL("exit-handler received additional signal '%s'. triggering exit-handle again.", strsignal(signalOrTimeout));
+                        LOG_CRITICAL("exit-handler received additional signal '{}'. triggering exit-handle again.", strsignal(signalOrTimeout));
                     }
 
                     exitHandle();
@@ -109,7 +109,7 @@ std::jthread Create(ExitHandle&& theExitHandle)
 
                 default:
                 {
-                    LOG_CRITICAL("got unexpected signal '%s'", strsignal(signalOrTimeout));
+                    LOG_CRITICAL("got unexpected signal '{}'", strsignal(signalOrTimeout));
                     break;
                 }
             }

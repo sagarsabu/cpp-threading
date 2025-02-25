@@ -22,22 +22,16 @@ public:
 
     EventReceiver Receiver() const { return m_receiver; }
 
-    const char* ReceiverName() const
+    constexpr std::string_view ReceiverName() const noexcept
     {
-        static const std::unordered_map<EventReceiver, const char*> receiverNameMap
+        switch (m_receiver)
         {
-            {EventReceiver::Self,             "Self"},
-            {EventReceiver::Timer,            "Timer"},
-            {EventReceiver::ManagerThread,    "ManagerThread"},
-            {EventReceiver::WorkerThread,     "WorkerThread"},
-        };
-
-        if (auto itr = receiverNameMap.find(m_receiver); itr != receiverNameMap.end())
-        {
-            return itr->second;
+            case EventReceiver::Self:               return "Self";
+            case EventReceiver::Timer:              return "Timer";
+            case EventReceiver::ManagerThread:      return "ManagerThread";
+            case EventReceiver::WorkerThread:       return "WorkerThread";
+            default:                                return "Unknown";
         }
-
-        return "Unknown";
     }
 
 protected:

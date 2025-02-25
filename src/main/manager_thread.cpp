@@ -26,22 +26,22 @@ void ManagerThread::AttachWorker(Thread* worker)
 
 void  ManagerThread::RequestShutdown()
 {
-    LOG_INFO("shutdown requested for '%s'", Name());
+    LOG_INFO("shutdown requested for '{}'", Name());
     m_shutdownInitiateSignal.release();
 }
 
 // Called from main thread
 void ManagerThread::WaitForShutdown()
 {
-    LOG_INFO("waiting for shutdown initiate signal for '%s'", Name());
+    LOG_INFO("waiting for shutdown initiate signal for '{}'", Name());
     m_shutdownInitiateSignal.acquire();
-    LOG_INFO("shutdown initiate signal for '%s' acquired", Name());
+    LOG_INFO("shutdown initiate signal for '{}' acquired", Name());
 
     TransmitEvent(std::make_unique<ManagerShutdownEvent>());
 
-    LOG_INFO("waiting for shutdown initiated signal for '%s'", Name());
+    LOG_INFO("waiting for shutdown initiated signal for '{}'", Name());
     m_shutdownInitiatedSignal.acquire();
-    LOG_INFO("shutdown initiated signal for '%s' acquired", Name());
+    LOG_INFO("shutdown initiated signal for '{}' acquired", Name());
 
     // Initiate a stop request for the manager thread
     Stop();
@@ -52,7 +52,7 @@ void ManagerThread::WaitForShutdown()
 
 void ManagerThread::TryWaitForWorkersShutdown()
 {
-    LOG_INFO("%s workers shutdown started", Name());
+    LOG_INFO("{} workers shutdown started", Name());
 
     auto workerTeardownStart = Clock::now();
     while (WorkersRunning())
@@ -63,19 +63,19 @@ void ManagerThread::TryWaitForWorkersShutdown()
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
-            LOG_CRITICAL("%s workers shutdown duration:%ld exceeded threshold duration:%ld ms",
-                Name(), duration.count(), TEARDOWN_THRESHOLD.count());
+            LOG_CRITICAL("{} workers shutdown duration:{} exceeded threshold duration:{}",
+                Name(), duration.count(), TEARDOWN_THRESHOLD);
             break;
         }
-        LOG_INFO("%s workers shutdown duration:%ld ms", Name(), duration.count());
+        LOG_INFO("{} workers shutdown duration:{}", Name(), duration);
     }
 
-    LOG_INFO("%s workers shutdown complete", Name());
+    LOG_INFO("{} workers shutdown complete", Name());
 }
 
 void ManagerThread::TryWaitForManagerShutdown()
 {
-    LOG_INFO("%s manager shutdown starting", Name());
+    LOG_INFO("{} manager shutdown starting", Name());
 
     auto managerTeardownStart = Clock::now();
     while (IsRunning())
@@ -86,14 +86,14 @@ void ManagerThread::TryWaitForManagerShutdown()
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
-            LOG_CRITICAL("%s manager shutdown duration:%ld exceeded threshold duration:%ld ms",
-                Name(), duration.count(), TEARDOWN_THRESHOLD.count());
+            LOG_CRITICAL("{} manager shutdown duration:{} exceeded threshold duration:{}",
+                Name(), duration.count(), TEARDOWN_THRESHOLD);
             break;
         }
-        LOG_INFO("%s manager shutdown duration:%ld ms", Name(), duration.count());
+        LOG_INFO("{} manager shutdown duration:{}", Name(), duration);
     }
 
-    LOG_INFO("%s manager shutdown complete", Name());
+    LOG_INFO("{} manager shutdown complete", Name());
 }
 
 void ManagerThread::SendEventsToWorkers()
@@ -102,15 +102,15 @@ void ManagerThread::SendEventsToWorkers()
 
     if (m_workersTerminated) [[unlikely]]
     {
-        LOG_WARNING("%s workers terminated", Name());
+        LOG_WARNING("{} workers terminated", Name());
         return;
     }
 
     for (auto worker : m_workers)
     {
-        LOG_INFO("%s sending work to %s", Name(), worker->Name());
+        LOG_INFO("{} sending work to {}", Name(), worker->Name());
         worker->TransmitEvent(std::make_unique<ManagerWorkerTestEvent>(m_testTimeout));
-        LOG_DEBUG("%s completed sending work to %s", Name(), worker->Name());
+        LOG_DEBUG("{} completed sending work to {}", Name(), worker->Name());
     }
 }
 
@@ -120,33 +120,33 @@ void ManagerThread::TeardownWorkers()
 
     if (m_workersTerminated)
     {
-        LOG_CRITICAL("%s workers termination has already been requested", Name());
+        LOG_CRITICAL("{} workers termination has already been requested", Name());
         return;
     }
 
     m_workersTerminated = true;
 
-    LOG_INFO("%s stopping transmit timer", Name());
+    LOG_INFO("{} stopping transmit timer", Name());
     RemoveTimer(ManagerTimerEvent::TransmitWork);
 
-    LOG_INFO("%s tearing down all workers", Name());
+    LOG_INFO("{} tearing down all workers", Name());
     for (auto worker : m_workers)
     {
-        LOG_INFO("%s stopping %s", Name(), worker->Name());
+        LOG_INFO("{} stopping {}", Name(), worker->Name());
         worker->Stop();
     }
 
-    LOG_INFO("%s stop requested for all workers", Name());
+    LOG_INFO("{} stop requested for all workers", Name());
 }
 
 void  ManagerThread::InitiateShutdown()
 {
-    LOG_INFO("%s initiating shutdown", Name());
+    LOG_INFO("{} initiating shutdown", Name());
 
     TeardownWorkers();
     m_shutdownInitiatedSignal.release();
 
-    LOG_INFO("%s initiated shutdown", Name());
+    LOG_INFO("{} initiated shutdown", Name());
 }
 
 bool ManagerThread::WorkersRunning()
@@ -163,7 +163,7 @@ bool ManagerThread::WorkersRunning()
 
 void ManagerThread::Starting()
 {
-    LOG_INFO("%s setting up periodic timer for self transmitting", Name());
+    LOG_INFO("{} setting up periodic timer for self transmitting", Name());
 
     AddPeriodicTimer(ManagerTimerEvent::TransmitWork, m_transmitPeriod);
     StartTimer(ManagerTimerEvent::TransmitWork);
@@ -186,7 +186,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 
                 default:
                 {
-                    LOG_ERROR("%s handle-event got unkown timer event:%d", Name(), event.Type());
+                    LOG_ERROR("{} handle-event got unkown timer event:{}", Name(), event.Type());
                     break;
                 }
             }
@@ -208,7 +208,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 
                 default:
                 {
-                    LOG_ERROR("%s handle-event got unkown manager event:%d", Name(), event.Type());
+                    LOG_ERROR("{} handle-event got unkown manager event:{}", Name(), (int) event.Type());
                     break;
                 }
             }
@@ -218,7 +218,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 
         default:
         {
-            LOG_ERROR("%s handle-event got event from unexpected receiver:%s",
+            LOG_ERROR("{} handle-event got event from unexpected receiver:{}",
                 Name(), threadEvent->ReceiverName());
             break;
         }
