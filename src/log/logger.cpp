@@ -222,15 +222,17 @@ std::string_view CurrentThreadName() noexcept
     // Max allowed buffer for POSIX thread name
     using ThreadNameBuffer = char[16];
 
-    static thread_local ThreadNameBuffer buff{};
-    static thread_local bool init{ false };
-    if (not init)
+    static thread_local std::string threadName{};
+    if (threadName.empty())
     {
-        init = true;
+        ThreadNameBuffer buff{};
         pthread_getname_np(pthread_self(), buff, sizeof(buff));
+
+        // centered thread name output
+        threadName = std::move(std::format("{:^17s}", buff));
     }
 
-    return { buff, sizeof(buff) };
+    return threadName;
 }
 
 LogStreamer& GetLogStreamer() noexcept { return *g_logStreamer; }

@@ -115,7 +115,7 @@ template<typename ...Args>
         LogStreamer::Stream& stream{ logStreamer.m_streamRef.get() };
         std::println(
             stream,
-            "{}[{}{}] [{:^16s}] [{}] {}{}",
+            "{}[{}{}] [{}] [{}] {}{}",
             GetLevelFormatter(level),
             ts.getSecondsBuffer(), ts.getMilliSecBuffer(),
             CurrentThreadName(),
