@@ -1,7 +1,4 @@
 #include <ctime>
-#include <iostream>
-#include <fstream>
-#include <filesystem>
 
 #include "log/logger.hpp"
 #include "timers/timer.hpp"
@@ -58,129 +55,6 @@ constexpr std::string_view LIGHT_WHITE{ "\x1B[97m" };
 
 // Helper classes / structs
 
-// LogStreamer
-
-void LogStreamer::Setup(const std::string& filename, Level level)
-{
-    m_logFilename = filename;
-    m_logLevel = level;
-
-    if (m_logFilename.empty())
-    {
-        SetStreamToConsole();
-        return;
-    }
-
-    // try setup a file logger if specified
-    try
-    {
-        if (std::filesystem::exists(m_logFilename) and not std::filesystem::is_regular_file(m_logFilename))
-        {
-            throw std::runtime_error("cannot write to non regular file '" + m_logFilename + "'");
-        }
-
-        std::ofstream file{ m_logFilename , std::ios::out | std::ios::ate | std::ios::app };
-        std::filesystem::permissions(
-            m_logFilename,
-            std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
-            std::filesystem::perm_options::add
-        );
-
-        if (file.fail())
-        {
-            throw std::runtime_error("unable to open file '" + m_logFilename + "' for writing");
-        }
-
-        SetStreamToFile(std::move(file));
-
-        m_logFileCreator = std::make_unique<PeriodicTimer>("LogFileCreator", s_logFileCreatorPeriod, [this] { EnsureLogFileWriteable(); });
-        m_logFileCreator->Start();
-    }
-    catch (const std::exception& e)
-    {
-        LOG_CRITICAL("==== failed to setup file logger. what: {} ====", e.what());
-    }
-}
-
-void LogStreamer::EnsureLogFileWriteable()
-{
-    if (m_logFilename.empty())
-    {
-        return;
-    }
-
-    try
-    {
-        // everything is okay
-        if (std::filesystem::exists(m_logFilename) and std::filesystem::is_regular_file(m_logFilename))
-        {
-            return;
-        }
-
-        // No longer writing to log file
-
-        m_lostLogTime += s_logFileCreatorPeriod.count();
-
-        if (std::filesystem::exists(m_logFilename) and not std::filesystem::is_regular_file(m_logFilename))
-        {
-            std::println(std::cerr, "cannot write to non regular file '{}'", m_logFilename);
-            return;
-        }
-
-        std::ofstream file{ m_logFilename , std::ios::out | std::ios::ate | std::ios::app };
-        std::filesystem::permissions(
-            m_logFilename,
-            std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
-            std::filesystem::perm_options::add
-        );
-
-        if (file.fail())
-        {
-            std::println(std::cerr, "unable to open file '{}' for writing", m_logFilename);
-            return;
-        }
-
-        SetStreamToFile(std::move(file));
-
-        LOG_CRITICAL("lost {} worth of logs", static_cast<decltype(s_logFileCreatorPeriod)>(m_lostLogTime));
-        m_lostLogTime = {};
-    }
-    catch (const std::filesystem::filesystem_error& e)
-    {
-        std::println(std::cerr, "file system error when attempting to recreate file logger. e: {}", e.what());
-    }
-}
-
-void LogStreamer::SetStreamToConsole()
-{
-    std::lock_guard lk{ m_mutex };
-    m_logFileStream = {};
-    m_streamRef = s_consoleStream;
-}
-
-void LogStreamer::SetStreamToFile(std::ofstream fileStream)
-{
-    std::lock_guard lk{ m_mutex };
-    m_logFileStream = std::move(fileStream);
-    m_streamRef = m_logFileStream;
-}
-
-// LogTimestamp
-
-LogTimestamp::LogTimestamp() noexcept
-{
-    std::timespec_get(&m_timeSpec, TIME_UTC);
-    std::tm localTimeRes{};
-    std::strftime(
-        m_secondsBuffer,
-        sizeof(m_secondsBuffer),
-        "%d-%m-%Y %H:%M:%S",
-        ::localtime_r(&m_timeSpec.tv_sec, &localTimeRes)
-    );
-    snprintf(m_extraSecBuff, sizeof(m_extraSecBuff), ":%09lu", m_timeSpec.tv_nsec);
-}
-
-
 // Global variables
 
 constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_COLOURS
@@ -203,13 +77,20 @@ constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_NAMES
     "CRIT ",        // Level::Critical
 };
 
-/**
- * Intentionally leaking here.
- * Logging in global object destructor's may cause issue if we destroy the logger
-*/
-LogStreamer* const g_logStreamer{ new LogStreamer };
-
 // Functions
+
+LogTimestamp GetCurrentTimeStamp() noexcept
+{
+    LogTimestamp ts;
+    timespec timeSpec{};
+    std::tm localTime{};
+
+    std::timespec_get(&timeSpec, TIME_UTC);
+    std::strftime(ts.m_s, sizeof(ts.m_s), "%d-%m-%Y %H:%M:%S", ::localtime_r(&timeSpec.tv_sec, &localTime));
+    snprintf(ts.m_ns, sizeof(ts.m_ns), ":%09lu", timeSpec.tv_nsec);
+
+    return ts;
+}
 
 std::string_view GetLevelFormatter(Level level) noexcept { return LEVEL_COLOURS[level]; }
 
@@ -234,10 +115,6 @@ std::string_view CurrentThreadName() noexcept
 
     return threadName;
 }
-
-LogStreamer& GetLogStreamer() noexcept { return *g_logStreamer; }
-
-bool ShouldLog(Level level) noexcept { return level >= g_logStreamer->GetLogLevel(); }
 
 } // namespace Internal
 

@@ -3,27 +3,15 @@
 #include <string>
 #include <format>
 #include <print>
-#include <mutex>
-#include <iostream>
-#include <fstream>
 
 #include "timers/timer.hpp"
+#include "log/log_stream.hpp"
 
 namespace Sage
 {
 
 namespace Logger
 {
-
-enum Level
-{
-    Trace,
-    Debug,
-    Info,
-    Warning,
-    Error,
-    Critical
-};
 
 void SetupLogger(const std::string& filename = "", Level logLevel = Level::Info);
 
@@ -36,46 +24,6 @@ std::string_view GetLevelName(Level level) noexcept;
 
 std::string_view GetFormatEnd() noexcept;
 
-class LogStreamer
-{
-public:
-    using Stream = std::ostream;
-
-    LogStreamer() = default;
-
-    void Setup(const std::string& filename, Level level);
-
-    Level GetLogLevel() const noexcept { return m_logLevel; }
-
-private:
-    // Nothing in here is movable or copyable
-    LogStreamer(const LogStreamer&) = delete;
-    LogStreamer(LogStreamer&&) = delete;
-    LogStreamer& operator=(const LogStreamer&) = delete;
-    LogStreamer& operator=(LogStreamer&&) = delete;
-
-    void EnsureLogFileWriteable();
-
-    void SetStreamToConsole();
-
-    void SetStreamToFile(std::ofstream fileStream);
-
-private:
-    static constexpr TimeS s_logFileCreatorPeriod{ 60s };
-    static constexpr std::reference_wrapper<Stream> s_consoleStream{ std::cout };
-
-    std::reference_wrapper<Stream> m_streamRef{ s_consoleStream };
-    std::recursive_mutex m_mutex{};
-    std::string m_logFilename{};
-    Level m_logLevel{ Level::Info };
-    size_t m_lostLogTime{ 0 };
-    std::ofstream m_logFileStream{};
-    std::unique_ptr<PeriodicTimer> m_logFileCreator{ nullptr };
-
-    template<typename ...Args>
-    friend inline void LogToStream(Level level, std::format_string<Args...> fmt, Args&&... args);
-};
-
 struct LogTimestamp
 {
     // e.g "01 - 09 - 2023 00:42 : 19"
@@ -83,31 +31,23 @@ struct LogTimestamp
     // :%09lu requires 22 bytes max
     using NanoSecBuffer = char[22];
 
-    LogTimestamp() noexcept;
-
-    constexpr const SecondsBuffer& getSecondsBuffer() const noexcept { return m_secondsBuffer; };
-
-    constexpr const NanoSecBuffer& getMilliSecBuffer() const noexcept { return m_extraSecBuff; };
-
-private:
-    SecondsBuffer m_secondsBuffer;
-    NanoSecBuffer m_extraSecBuff;
-    timespec m_timeSpec;
+    SecondsBuffer m_s;
+    NanoSecBuffer m_ns;
 };
+
+LogTimestamp GetCurrentTimeStamp() noexcept;
 
 std::string_view CurrentThreadName() noexcept;
 
-LogStreamer& GetLogStreamer() noexcept;
-
-bool ShouldLog(Level level) noexcept;
+inline bool ShouldLog(Level level) noexcept { return level >= GetLogStreamer().GetLogLevel(); }
 
 template<typename ...Args>
-[[gnu::always_inline]] inline void LogToStream(Level level, std::format_string<Args...> fmt, Args&&... args)
+ inline void LogToStream(Level level, std::format_string<Args...> fmt, Args&&... args)
 {
     if (not Internal::ShouldLog(level))
         return;
 
-    LogTimestamp ts;
+    LogTimestamp ts{ GetCurrentTimeStamp() };
 
     {
         auto& logStreamer{ GetLogStreamer() };
@@ -117,7 +57,7 @@ template<typename ...Args>
             stream,
             "{}[{}{}] [{}] [{}] {}{}",
             GetLevelFormatter(level),
-            ts.getSecondsBuffer(), ts.getMilliSecBuffer(),
+            ts.m_s, ts.m_ns,
             CurrentThreadName(),
             GetLevelName(level),
             std::format(fmt, std::forward_like<Args>(args)...),
@@ -128,37 +68,37 @@ template<typename ...Args>
 }
 
 template<typename ...Args>
-[[gnu::always_inline]] inline void Trace(std::format_string<Args...> fmt, Args&&... args)
+ inline void Trace(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Trace, fmt, std::forward_like<Args>(args)...);
 }
 
 template<typename ...Args>
-[[gnu::always_inline]] inline void Debug(std::format_string<Args...> fmt, Args&&... args)
+ inline void Debug(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Debug, fmt, std::forward_like<Args>(args)...);
 }
 
 template<typename ...Args>
-[[gnu::always_inline]] inline void Info(std::format_string<Args...> fmt, Args&&... args)
+ inline void Info(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Info, fmt, std::forward_like<Args>(args)...);
 }
 
 template<typename ...Args>
-[[gnu::always_inline]] inline void Warning(std::format_string<Args...> fmt, Args&&... args)
+ inline void Warning(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Warning, fmt, std::forward_like<Args>(args)...);
 }
 
 template<typename ...Args>
-[[gnu::always_inline]] inline void Error(std::format_string<Args...> fmt, Args&&... args)
+ inline void Error(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Error, fmt, std::forward_like<Args>(args)...);
 }
 
 template<typename ...Args>
-[[gnu::always_inline]] inline void Critical(std::format_string<Args...> fmt, Args&&... args)
+ inline void Critical(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Critical, fmt, std::forward_like<Args>(args)...);
 }

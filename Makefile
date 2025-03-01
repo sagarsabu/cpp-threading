@@ -1,16 +1,24 @@
-.PHONY: all release debug
+.PHONY: all release debug release-config debug-config
 .PHONY: lint
 .PHONY: clean
 
+CXX:=$(shell which g++-14)
+export CXX
+
+ifeq ($(CXX),)
+$(error Failed to find g++-14)
+endif
+
 CMAKE=$(shell which cmake)
 CORES?=$(shell nproc)
+
 BUILD_DIR=$(CURDIR)/build
 RELEASE_DIR=$(BUILD_DIR)/release
 DEBUG_DIR=$(BUILD_DIR)/debug
 LINT_DIR=$(BUILD_DIR)/lint
 
 CPPCHECK_PARAMS=\
-	--language=c++ --std=c++20 \
+	--language=c++ --std=c++23 \
 	--library=posix \
 	--inconclusive --force --inline-suppr \
 	--enable=all \
@@ -24,24 +32,24 @@ CPPCHECK_PARAMS=\
 
 all: release debug
 
-release: $(RELEASE_DIR)
+release: release-config
 	$(info Making release build)
-	@+$(CMAKE) --build $< --config Release --target all  -j$(CORES) --
+	@+$(CMAKE) --build $(RELEASE_DIR) -t cpp-threading  -j$(CORES)
 
-debug: $(DEBUG_DIR)
+debug: debug-config
 	$(info Making debug build)
-	@+$(CMAKE) --build $< --config Debug --target all  -j$(CORES) --
+	@+$(CMAKE) --build $(DEBUG_DIR) -t cpp-threading  -j$(CORES)
 
 clean:
 	rm -rf $(BUILD_DIR)
 
-$(RELEASE_DIR): CMakeLists.txt
+release-config:
 	$(info Generating release cmake build config)
-	@+$(CMAKE) -DCMAKE_BUILD_TYPE=Release -S $(CURDIR) -B $@
+	@+$(CMAKE) -DCMAKE_BUILD_TYPE=Release -S $(CURDIR) -B $(RELEASE_DIR)
 
-$(DEBUG_DIR): CMakeLists.txt
+debug-config:
 	$(info Generating debug cmake build config)
-	@+$(CMAKE) -DCMAKE_BUILD_TYPE=Debug -S $(CURDIR) -B $@
+	@+$(CMAKE) -DCMAKE_BUILD_TYPE=Debug -S $(CURDIR) -B $(DEBUG_DIR)
 
 lint:
 	@mkdir -p $(LINT_DIR)
