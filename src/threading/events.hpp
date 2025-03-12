@@ -1,6 +1,6 @@
 #pragma once
 
-#include <unordered_map>
+#include <string_view>
 
 namespace Sage::Threading
 {
@@ -26,16 +26,21 @@ public:
     {
         switch (m_receiver)
         {
-            case EventReceiver::Self:               return "Self";
-            case EventReceiver::Timer:              return "Timer";
-            case EventReceiver::ManagerThread:      return "ManagerThread";
-            case EventReceiver::WorkerThread:       return "WorkerThread";
-            default:                                return "Unknown";
+            case EventReceiver::Self:
+                return "Self";
+            case EventReceiver::Timer:
+                return "Timer";
+            case EventReceiver::ManagerThread:
+                return "ManagerThread";
+            case EventReceiver::WorkerThread:
+                return "WorkerThread";
+            default:
+                return "Unknown";
         }
     }
 
 protected:
-    explicit ThreadEvent(EventReceiver receiver) : m_receiver{ receiver } { }
+    explicit ThreadEvent(EventReceiver receiver) : m_receiver{ receiver } {}
 
 private:
     const EventReceiver m_receiver;
@@ -56,10 +61,7 @@ public:
     Event Type() const { return m_event; }
 
 protected:
-    explicit SelfEvent(Event eventType) :
-        ThreadEvent{ EventReceiver::Self },
-        m_event{ eventType }
-    { }
+    explicit SelfEvent(Event eventType) : ThreadEvent{ EventReceiver::Self }, m_event{ eventType } {}
 
 private:
     const Event m_event;
@@ -68,9 +70,7 @@ private:
 class ExitEvent final : public SelfEvent
 {
 public:
-    ExitEvent() :
-        SelfEvent{ Event::Exit }
-    { }
+    ExitEvent() : SelfEvent{ Event::Exit } {}
 };
 
 class TimerEvent final : public ThreadEvent
@@ -78,10 +78,7 @@ class TimerEvent final : public ThreadEvent
 public:
     using EventID = int;
 
-    explicit TimerEvent(EventID timerEvent) :
-        ThreadEvent{ EventReceiver::Timer },
-        m_timerEvent{ timerEvent }
-    { }
+    explicit TimerEvent(EventID timerEvent) : ThreadEvent{ EventReceiver::Timer }, m_timerEvent{ timerEvent } {}
 
     EventID Type() const { return m_timerEvent; }
 
@@ -90,4 +87,3 @@ private:
 };
 
 } // namespace Sage::Threading
-

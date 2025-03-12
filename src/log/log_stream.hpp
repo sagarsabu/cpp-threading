@@ -1,12 +1,12 @@
 #pragma once
 
-#include <string>
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <mutex>
+#include <string>
 
-#include "timers/timer.hpp"
 #include "log/log_levels.hpp"
+#include "timers/timer.hpp"
 
 namespace Sage::Logger::Internal
 {
@@ -47,13 +47,10 @@ private:
     std::ofstream m_logFileStream{};
     std::unique_ptr<PeriodicTimer> m_logFileCreator{ nullptr };
 
-    template<typename ...Args>
+    template<typename... Args>
     friend inline void LogToStream(Level level, std::format_string<Args...> fmt, Args&&... args);
 };
 
 LogStreamer& GetLogStreamer() noexcept;
 
-
 } // namespace Sage::Logger::Internal
-
-

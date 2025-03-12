@@ -1,9 +1,9 @@
+#include <array>
 #include <csignal>
 #include <cstring>
-#include <array>
 
-#include "main/exit_handler.hpp"
 #include "log/logger.hpp"
+#include "main/exit_handler.hpp"
 #include "timers/timer.hpp"
 
 namespace Sage::ExitHandler
@@ -36,29 +36,34 @@ std::jthread Create(ExitHandle&& theExitHandle)
 
     LOG_INFO("successfully blocked exit signals");
 
-    auto handler = [exitHandle = std::move(theExitHandle), signalsToBlock = std::move(signalsToBlock)](std::stop_token stopToken) -> void
+    auto handler = [exitHandle = std::move(theExitHandle),
+                    signalsToBlock = std::move(signalsToBlock)](std::stop_token stopToken) -> void
     {
         pthread_setname_np(pthread_self(), "ExitHandler");
 
         constexpr auto shutdownThreshold{ 5s };
         constexpr auto shutdownTick{ 500ms };
-        PeriodicTimer shutdownTimer("ExitHandlerShutdownTimer", shutdownTick, [&]
-        {
-            static const auto shutdownStart{ Clock::now() - shutdownTick };
+        PeriodicTimer shutdownTimer(
+            "ExitHandlerShutdownTimer",
+            shutdownTick,
+            [&]
+            {
+                static const auto shutdownStart{ Clock::now() - shutdownTick };
 
-            auto now = Clock::now();
-            auto duration = std::chrono::duration_cast<TimeMS>(now - shutdownStart);
-            if (duration >= shutdownThreshold)
-            {
-                // Can't be caught so the os will kill us
-                LOG_CRITICAL("shutdown duration exceeded. forcing shutdown");
-                std::raise(SIGKILL);
+                auto now = Clock::now();
+                auto duration = std::chrono::duration_cast<TimeMS>(now - shutdownStart);
+                if (duration >= shutdownThreshold)
+                {
+                    // Can't be caught so the os will kill us
+                    LOG_CRITICAL("shutdown duration exceeded. forcing shutdown");
+                    std::raise(SIGKILL);
+                }
+                else
+                {
+                    LOG_WARNING("shutdown duration at {}", duration);
+                }
             }
-            else
-            {
-                LOG_WARNING("shutdown duration at {}", duration);
-            }
-        });
+        );
 
         LOG_INFO("exit-handler waiting for exit signal");
 
@@ -95,12 +100,17 @@ std::jthread Create(ExitHandle&& theExitHandle)
                     if (not triggered)
                     {
                         triggered = true;
-                        LOG_INFO("exit-handler received signal '{}'. triggering exit-handle.", strsignal(signalOrTimeout));
+                        LOG_INFO(
+                            "exit-handler received signal '{}'. triggering exit-handle.", strsignal(signalOrTimeout)
+                        );
                         shutdownTimer.Start();
                     }
                     else
                     {
-                        LOG_CRITICAL("exit-handler received additional signal '{}'. triggering exit-handle again.", strsignal(signalOrTimeout));
+                        LOG_CRITICAL(
+                            "exit-handler received additional signal '{}'. triggering exit-handle again.",
+                            strsignal(signalOrTimeout)
+                        );
                     }
 
                     exitHandle();

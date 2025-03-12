@@ -10,10 +10,7 @@ namespace Sage
 
 struct ScopedDeadline final
 {
-    ScopedDeadline(const std::string& tag, const TimeMS& deadline) :
-        m_tag{ tag },
-        m_deadline{ deadline }
-    { }
+    ScopedDeadline(const std::string& tag, const TimeMS& deadline) : m_tag{ tag }, m_deadline{ deadline } {}
 
     ~ScopedDeadline()
     {
@@ -25,8 +22,7 @@ struct ScopedDeadline final
         }
         else
         {
-            LOG_WARNING("ScopedDeadline '{}' took:{} deadline:{}",
-                m_tag, duration, m_deadline);
+            LOG_WARNING("ScopedDeadline '{}' took:{} deadline:{}", m_tag, duration, m_deadline);
         }
     }
 

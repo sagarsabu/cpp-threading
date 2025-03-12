@@ -1,7 +1,6 @@
 #pragma once
 
 #include "threading/thread.hpp"
-#include "threading/events.hpp"
 
 namespace Sage::Threading
 {

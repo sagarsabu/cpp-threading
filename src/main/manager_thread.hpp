@@ -1,13 +1,12 @@
 #pragma once
 
-#include <memory>
-#include <set>
 #include <atomic>
 #include <semaphore>
+#include <set>
 
-#include "timers/timer.hpp"
-#include "threading/thread.hpp"
 #include "threading/events.hpp"
+#include "threading/thread.hpp"
+#include "timers/timer.hpp"
 
 namespace Sage::Threading
 {
@@ -28,10 +27,7 @@ public:
     Event Type() const { return m_event; }
 
 protected:
-    ManagerEvent(Event eventType, EventReceiver receiver) :
-        ThreadEvent{ receiver },
-        m_event{ eventType }
-    { }
+    ManagerEvent(Event eventType, EventReceiver receiver) : ThreadEvent{ receiver }, m_event{ eventType } {}
 
 private:
     const Event m_event;
@@ -40,9 +36,7 @@ private:
 class ManagerShutdownEvent final : public ManagerEvent
 {
 public:
-    ManagerShutdownEvent() :
-        ManagerEvent{ Event::Shutdown, EventReceiver::ManagerThread }
-    { }
+    ManagerShutdownEvent() : ManagerEvent{ Event::Shutdown, EventReceiver::ManagerThread } {}
 };
 
 class ManagerWorkerTestEvent final : public ManagerEvent
@@ -51,7 +45,8 @@ public:
     explicit ManagerWorkerTestEvent(const TimeMS& timeout) :
         ManagerEvent{ Event::WorkerTest, EventReceiver::WorkerThread },
         m_timeout{ timeout }
-    { }
+    {
+    }
 
     TimeMS m_timeout;
 };

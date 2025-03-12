@@ -25,7 +25,7 @@ void LogStreamer::Setup(const std::string& filename, Level level)
             throw std::runtime_error("cannot write to non regular file '" + m_logFilename + "'");
         }
 
-        std::ofstream file{ m_logFilename , std::ios::out | std::ios::ate | std::ios::app };
+        std::ofstream file{ m_logFilename, std::ios::out | std::ios::ate | std::ios::app };
         std::filesystem::permissions(
             m_logFilename,
             std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
@@ -39,7 +39,9 @@ void LogStreamer::Setup(const std::string& filename, Level level)
 
         SetStreamToFile(std::move(file));
 
-        m_logFileCreator = std::make_unique<PeriodicTimer>("LogFileCreator", s_logFileCreatorPeriod, [this] { EnsureLogFileWriteable(); });
+        m_logFileCreator = std::make_unique<PeriodicTimer>(
+            "LogFileCreator", s_logFileCreatorPeriod, [this] { EnsureLogFileWriteable(); }
+        );
         m_logFileCreator->Start();
     }
     catch (const std::exception& e)
@@ -73,7 +75,7 @@ void LogStreamer::EnsureLogFileWriteable()
             return;
         }
 
-        std::ofstream file{ m_logFilename , std::ios::out | std::ios::ate | std::ios::app };
+        std::ofstream file{ m_logFilename, std::ios::out | std::ios::ate | std::ios::app };
         std::filesystem::permissions(
             m_logFilename,
             std::filesystem::perms::owner_write | std::filesystem::perms::group_read,
@@ -114,7 +116,7 @@ void LogStreamer::SetStreamToFile(std::ofstream fileStream)
 /**
  * Intentionally leaking here.
  * Logging in global object destructor's may cause issue if we destroy the logger
-*/
+ */
 LogStreamer* const g_logStreamer{ new LogStreamer };
 
 LogStreamer& GetLogStreamer() noexcept { return *g_logStreamer; }

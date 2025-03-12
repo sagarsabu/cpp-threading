@@ -1,5 +1,5 @@
-#include "log/logger.hpp"
 #include "main/worker_thread.hpp"
+#include "log/logger.hpp"
 #include "main/manager_thread.hpp"
 
 namespace Sage::Threading
@@ -7,16 +7,13 @@ namespace Sage::Threading
 
 // Worker thread
 
-WorkerThread::WorkerThread() :
-    Thread{ std::string("WkrThread-") + std::to_string(++s_id) }
-{ }
+WorkerThread::WorkerThread() : Thread{ std::string("WkrThread-") + std::to_string(++s_id) } {}
 
 void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
     if (threadEvent->Receiver() != EventReceiver::WorkerThread) [[unlikely]]
     {
-        LOG_ERROR("{} handle-event got event intended for receiver:{}",
-            Name(), threadEvent->ReceiverName());
+        LOG_ERROR("{} handle-event got event intended for receiver:{}", Name(), threadEvent->ReceiverName());
         return;
     }
 
@@ -26,16 +23,14 @@ void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
         case ManagerEvent::WorkerTest:
         {
             auto& rxEvent = static_cast<ManagerWorkerTestEvent&>(event);
-            LOG_INFO("{} handle-event 'Test'. sleeping for {}",
-                Name(), rxEvent.m_timeout);
+            LOG_INFO("{} handle-event 'Test'. sleeping for {}", Name(), rxEvent.m_timeout);
             std::this_thread::sleep_for(rxEvent.m_timeout);
             break;
         }
 
         default:
         {
-            LOG_ERROR("{} handle-event unknown event:{}",
-                Name(), static_cast<int>(event.Type()));
+            LOG_ERROR("{} handle-event unknown event:{}", Name(), static_cast<int>(event.Type()));
             break;
         }
     }

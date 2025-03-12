@@ -51,9 +51,6 @@ _deps
 # External projects
 *-prefix/
 
-### VisualStudioCode ###
-.vscode/
-
 # Local History for Visual Studio Code
 .history/
 
@@ -70,3 +67,9 @@ _deps
 bin/
 build/
 *.log
+
+# IDEs
+.vscode/
+.fleet/
+.zed/
+.cache/

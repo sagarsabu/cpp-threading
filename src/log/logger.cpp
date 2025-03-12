@@ -1,7 +1,6 @@
 #include <ctime>
 
 #include "log/logger.hpp"
-#include "timers/timer.hpp"
 
 namespace Sage
 {
@@ -9,10 +8,7 @@ namespace Sage
 namespace Logger
 {
 
-void SetupLogger(const std::string& filename, Level logLevel)
-{
-    Internal::GetLogStreamer().Setup(filename, logLevel);
-}
+void SetupLogger(const std::string& filename, Level logLevel) { Internal::GetLogStreamer().Setup(filename, logLevel); }
 
 namespace Internal
 {
@@ -57,24 +53,22 @@ constexpr std::string_view LIGHT_WHITE{ "\x1B[97m" };
 
 // Global variables
 
-constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_COLOURS
-{
-    LIGHT_GREEN,    // Level::Trace
-    DARK_BLUE,      // Level::Debug
-    DARK_WHITE,     // Level::Info
-    LIGHT_YELLOW,   // Level::Warning
-    LIGHT_RED,      // Level::Error
-    DARK_RED,       // Level::Critical
+constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_COLOURS{
+    LIGHT_GREEN,  // Level::Trace
+    DARK_BLUE,    // Level::Debug
+    DARK_WHITE,   // Level::Info
+    LIGHT_YELLOW, // Level::Warning
+    LIGHT_RED,    // Level::Error
+    DARK_RED,     // Level::Critical
 };
 
-constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_NAMES
-{
-    "TRACE",        // Level::Trace
-    "DEBUG",        // Level::Debug
-    "INFO ",        // Level::Info
-    "WARN ",        // Level::Warning
-    "ERROR",        // Level::Error
-    "CRIT ",        // Level::Critical
+constexpr std::array<std::string_view, Level::Critical + 1> LEVEL_NAMES{
+    "TRACE", // Level::Trace
+    "DEBUG", // Level::Debug
+    "INFO ", // Level::Info
+    "WARN ", // Level::Warning
+    "ERROR", // Level::Error
+    "CRIT ", // Level::Critical
 };
 
 // Functions
@@ -110,7 +104,7 @@ std::string_view CurrentThreadName() noexcept
         pthread_getname_np(pthread_self(), buff, sizeof(buff));
 
         // centered thread name output
-        threadName = std::move(std::format("{:^17s}", buff));
+        threadName = std::format("{:^17s}", buff);
     }
 
     return threadName;

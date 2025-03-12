@@ -1,10 +1,10 @@
-#include <chrono>
 #include <algorithm>
+#include <chrono>
 
 #include "log/logger.hpp"
-#include "threading/events.hpp"
 #include "main/manager_thread.hpp"
-#include "main/worker_thread.hpp"
+
+#include "threading/events.hpp"
 
 namespace Sage::Threading
 {
@@ -14,9 +14,7 @@ enum ManagerTimerEvent
     TransmitWork
 };
 
-ManagerThread::ManagerThread() :
-    Thread{ "MngrThread" }
-{ }
+ManagerThread::ManagerThread() : Thread{ "MngrThread" } {}
 
 void ManagerThread::AttachWorker(Thread* worker)
 {
@@ -24,7 +22,7 @@ void ManagerThread::AttachWorker(Thread* worker)
     m_workers.emplace(worker);
 }
 
-void  ManagerThread::RequestShutdown()
+void ManagerThread::RequestShutdown()
 {
     LOG_INFO("shutdown requested for '{}'", Name());
     m_shutdownInitiateSignal.release();
@@ -63,8 +61,12 @@ void ManagerThread::TryWaitForWorkersShutdown()
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
-            LOG_CRITICAL("{} workers shutdown duration:{} exceeded threshold duration:{}",
-                Name(), duration.count(), TEARDOWN_THRESHOLD);
+            LOG_CRITICAL(
+                "{} workers shutdown duration:{} exceeded threshold duration:{}",
+                Name(),
+                duration.count(),
+                TEARDOWN_THRESHOLD
+            );
             break;
         }
         LOG_INFO("{} workers shutdown duration:{}", Name(), duration);
@@ -86,8 +88,12 @@ void ManagerThread::TryWaitForManagerShutdown()
 
         if (duration >= TEARDOWN_THRESHOLD)
         {
-            LOG_CRITICAL("{} manager shutdown duration:{} exceeded threshold duration:{}",
-                Name(), duration.count(), TEARDOWN_THRESHOLD);
+            LOG_CRITICAL(
+                "{} manager shutdown duration:{} exceeded threshold duration:{}",
+                Name(),
+                duration.count(),
+                TEARDOWN_THRESHOLD
+            );
             break;
         }
         LOG_INFO("{} manager shutdown duration:{}", Name(), duration);
@@ -139,7 +145,7 @@ void ManagerThread::TeardownWorkers()
     LOG_INFO("{} stop requested for all workers", Name());
 }
 
-void  ManagerThread::InitiateShutdown()
+void ManagerThread::InitiateShutdown()
 {
     LOG_INFO("{} initiating shutdown", Name());
 
@@ -153,11 +159,8 @@ bool ManagerThread::WorkersRunning()
 {
     std::lock_guard lock{ m_workersMtx };
 
-    bool aWorkerIsRunning = std::any_of(
-        m_workers.cbegin(),
-        m_workers.cend(),
-        [](const Thread* worker) { return worker->IsRunning(); }
-    );
+    bool aWorkerIsRunning =
+        std::any_of(m_workers.cbegin(), m_workers.cend(), [](const Thread* worker) { return worker->IsRunning(); });
     return aWorkerIsRunning;
 }
 
@@ -208,7 +211,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 
                 default:
                 {
-                    LOG_ERROR("{} handle-event got unkown manager event:{}", Name(), (int) event.Type());
+                    LOG_ERROR("{} handle-event got unkown manager event:{}", Name(), (int)event.Type());
                     break;
                 }
             }
@@ -218,8 +221,7 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 
         default:
         {
-            LOG_ERROR("{} handle-event got event from unexpected receiver:{}",
-                Name(), threadEvent->ReceiverName());
+            LOG_ERROR("{} handle-event got event from unexpected receiver:{}", Name(), threadEvent->ReceiverName());
             break;
         }
     }

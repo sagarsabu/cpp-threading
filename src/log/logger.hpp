@@ -1,10 +1,9 @@
 #pragma once
 
-#include <string>
 #include <format>
 #include <print>
+#include <string>
 
-#include "timers/timer.hpp"
 #include "log/log_stream.hpp"
 
 namespace Sage
@@ -41,8 +40,7 @@ std::string_view CurrentThreadName() noexcept;
 
 inline bool ShouldLog(Level level) noexcept { return level >= GetLogStreamer().GetLogLevel(); }
 
-template<typename ...Args>
- inline void LogToStream(Level level, std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args> inline void LogToStream(Level level, std::format_string<Args...> fmt, Args&&... args)
 {
     if (not Internal::ShouldLog(level))
         return;
@@ -57,7 +55,8 @@ template<typename ...Args>
             stream,
             "{}[{}{}] [{}] [{}] {}{}",
             GetLevelFormatter(level),
-            ts.m_s, ts.m_ns,
+            ts.m_s,
+            ts.m_ns,
             CurrentThreadName(),
             GetLevelName(level),
             std::format(fmt, std::forward_like<Args>(args)...),
@@ -67,38 +66,32 @@ template<typename ...Args>
     }
 }
 
-template<typename ...Args>
- inline void Trace(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args> inline void Trace(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Trace, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename ...Args>
- inline void Debug(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args> inline void Debug(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Debug, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename ...Args>
- inline void Info(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args> inline void Info(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Info, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename ...Args>
- inline void Warning(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args> inline void Warning(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Warning, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename ...Args>
- inline void Error(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args> inline void Error(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Error, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename ...Args>
- inline void Critical(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args> inline void Critical(std::format_string<Args...> fmt, Args&&... args)
 {
     Logger::Internal::LogToStream(Logger::Critical, fmt, std::forward_like<Args>(args)...);
 }
@@ -111,14 +104,18 @@ template<typename ...Args>
 
 // Log marcos for lazy va args evaluation
 
-#define LOG_TRACE(fmt, ...) if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Trace)) [[unlikely]] Sage::Logger::Internal::Trace(fmt, ## __VA_ARGS__)
+#define LOG_TRACE(fmt, ...)                                                                                            \
+    if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Trace)) [[unlikely]]                                           \
+    Sage::Logger::Internal::Trace(fmt, ##__VA_ARGS__)
 
-#define LOG_DEBUG(fmt, ...) if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Debug)) [[unlikely]] Sage::Logger::Internal::Debug(fmt, ## __VA_ARGS__)
+#define LOG_DEBUG(fmt, ...)                                                                                            \
+    if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Debug)) [[unlikely]]                                           \
+    Sage::Logger::Internal::Debug(fmt, ##__VA_ARGS__)
 
-#define LOG_INFO(fmt, ...) Sage::Logger::Internal::Info(fmt, ## __VA_ARGS__)
+#define LOG_INFO(fmt, ...) Sage::Logger::Internal::Info(fmt, ##__VA_ARGS__)
 
-#define LOG_WARNING(fmt, ...) Sage::Logger::Internal::Warning(fmt, ## __VA_ARGS__)
+#define LOG_WARNING(fmt, ...) Sage::Logger::Internal::Warning(fmt, ##__VA_ARGS__)
 
-#define LOG_ERROR(fmt, ...) Sage::Logger::Internal::Error(fmt, ## __VA_ARGS__)
+#define LOG_ERROR(fmt, ...) Sage::Logger::Internal::Error(fmt, ##__VA_ARGS__)
 
-#define LOG_CRITICAL(fmt, ...) Sage::Logger::Internal::Critical(fmt, ## __VA_ARGS__)
+#define LOG_CRITICAL(fmt, ...) Sage::Logger::Internal::Critical(fmt, ##__VA_ARGS__)

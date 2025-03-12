@@ -1,13 +1,13 @@
 #pragma once
 
-#include <thread>
-#include <queue>
-#include <memory>
-#include <string>
-#include <mutex>
-#include <semaphore>
 #include <atomic>
 #include <latch>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <semaphore>
+#include <string>
+#include <thread>
 #include <unordered_map>
 
 #include "threading/events.hpp"
@@ -40,9 +40,9 @@ public:
     bool IsRunning() const noexcept { return m_running; }
 
 protected:
-    virtual void Starting() { }
+    virtual void Starting() {}
 
-    virtual void Stopping() { }
+    virtual void Stopping() {}
 
     virtual void HandleEvent(UniqueThreadEvent event) = 0;
 

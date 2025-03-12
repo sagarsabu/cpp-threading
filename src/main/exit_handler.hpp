@@ -1,7 +1,7 @@
 #pragma once
 
-#include <thread>
 #include <functional>
+#include <thread>
 
 namespace Sage::ExitHandler
 {

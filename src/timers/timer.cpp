@@ -18,7 +18,7 @@ Timer::Timer(const std::string& name, const TimeNS& startDelta, const TimeNS& pe
     LOG_DEBUG("[{}] c'tor timer", Name());
 
     sigevent signalEvent{};
-    struct sigaction signalAction {};
+    struct sigaction signalAction;
 
     signalEvent.sigev_signo = SIGRTMIN;
     // So we send the signal to the same the thread that created the timer
@@ -86,13 +86,14 @@ void Timer::Stop() const
 
 FireOnceTimer::FireOnceTimer(const std::string& name, const TimeNS& delta, TimerCallback&& callback) :
     Timer{ name, delta, 0ns, std::move(callback) }
-{ }
+{
+}
 
 // Periodic timer
 
 PeriodicTimer::PeriodicTimer(const std::string& name, const TimeNS& period, TimerCallback&& callback) :
     Timer{ name, period, period, std::move(callback) }
-{ }
+{
+}
 
 } // namespace Sage
-

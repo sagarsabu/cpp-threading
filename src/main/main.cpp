@@ -1,11 +1,10 @@
-#include <atomic>
-#include <csignal>
 #include <getopt.h>
-#include <utility>
+
+#include <csignal>
 #include <iostream>
+#include <utility>
 
 #include "log/logger.hpp"
-#include "timers/timer.hpp"
 #include "main/exit_handler.hpp"
 #include "main/manager_thread.hpp"
 #include "main/worker_thread.hpp"
@@ -14,12 +13,11 @@ using namespace Sage;
 
 auto GetCLiArgs(int argc, char** const argv)
 {
-    static const option argOptions[]
-    {
-        {"help", no_argument, nullptr, 'h' },
-        {"level", required_argument, nullptr, 'l' },
-        {"file", required_argument, nullptr, 'f' },
-        {0, 0, 0, 0}
+    static const option argOptions[]{
+        { "help",  no_argument,       nullptr, 'h' },
+        { "level", required_argument, nullptr, 'l' },
+        { "file",  required_argument, nullptr, 'f' },
+        { 0,       0,                 0,       0   }
     };
 
     auto usage = [&argv]
@@ -30,12 +28,12 @@ auto GetCLiArgs(int argc, char** const argv)
             progName = progName.substr(pos + 1);
         }
 
-        std::cout <<
-            "Usage: " << progName <<
-            "\n\t[optional] --level|-l <t|trace|d|debug|i|info|w|warn|e|error|c|critical>"
-            "\n\t[optional] --file|-f <filename> "
-            "\n\t[optional] --help|-h"
-            << std::endl;
+        std::cout << "Usage: " << progName
+                  << "\n\t[optional] --level|-l "
+                     "<t|trace|d|debug|i|info|w|warn|e|error|c|critical>"
+                     "\n\t[optional] --file|-f <filename> "
+                     "\n\t[optional] --help|-h"
+                  << std::endl;
     };
 
     auto getLogLevel = [](std::string_view logArg)
@@ -108,7 +106,7 @@ int main(int argc, char** const argv)
 
     try
     {
-        auto [logLevel, logFile] { GetCLiArgs(argc, argv) };
+        auto [logLevel, logFile]{ GetCLiArgs(argc, argv) };
 
         // Setup logging
         Logger::SetupLogger(logFile, logLevel);
@@ -116,14 +114,16 @@ int main(int argc, char** const argv)
         LOG_INFO("==== starting ====");
 
         Threading::ManagerThread* managerPtr{ nullptr };
-        std::jthread exitHandler = ExitHandler::Create([&managerPtr]
-        {
-            LOG_INFO("exit-handle triggered");
-            if (managerPtr != nullptr)
+        std::jthread exitHandler = ExitHandler::Create(
+            [&managerPtr]
             {
-                managerPtr->RequestShutdown();
+                LOG_INFO("exit-handle triggered");
+                if (managerPtr != nullptr)
+                {
+                    managerPtr->RequestShutdown();
+                }
             }
-        });
+        );
 
         Threading::ManagerThread manager;
         managerPtr = &manager;

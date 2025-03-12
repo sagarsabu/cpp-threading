@@ -1,9 +1,8 @@
 #pragma once
 
+#include <chrono>
 #include <ctime>
 #include <functional>
-#include <chrono>
-
 
 namespace Sage
 {
@@ -66,10 +65,8 @@ private:
     const SigValData m_signalData;
 
 private:
-    static constexpr itimerspec DISABLED_TIMER{
-        .it_interval = ChronoTimeToTimeSpec(0ns),
-        .it_value = ChronoTimeToTimeSpec(0ns)
-    };
+    static constexpr itimerspec DISABLED_TIMER{ .it_interval = ChronoTimeToTimeSpec(0ns),
+                                                .it_value = ChronoTimeToTimeSpec(0ns) };
 };
 
 // Fire once timer. Has to be restarted
