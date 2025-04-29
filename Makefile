@@ -31,6 +31,7 @@ CPPCHECK_PARAMS=\
 	--suppress=missingIncludeSystem \
 	--suppress=checkersReport \
 	--checkers-report=$(LINT_DIR)/details.txt \
+	--check-level=exhaustive \
 	-I $(CURDIR)/src/
 
 .DEFAULT_GOAL=release

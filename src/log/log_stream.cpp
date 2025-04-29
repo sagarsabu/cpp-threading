@@ -101,14 +101,14 @@ void LogStreamer::EnsureLogFileWriteable()
 
 void LogStreamer::SetStreamToConsole()
 {
-    std::lock_guard lk{ m_mutex };
+    std::lock_guard lk{ m_streamSetMutex };
     m_logFileStream = {};
     m_streamRef = s_consoleStream;
 }
 
 void LogStreamer::SetStreamToFile(std::ofstream fileStream)
 {
-    std::lock_guard lk{ m_mutex };
+    std::lock_guard lk{ m_streamSetMutex };
     m_logFileStream = std::move(fileStream);
     m_streamRef = m_logFileStream;
 }
@@ -117,7 +117,7 @@ void LogStreamer::SetStreamToFile(std::ofstream fileStream)
  * Intentionally leaking here.
  * Logging in global object destructor's may cause issue if we destroy the logger
  */
-LogStreamer* const g_logStreamer{ new LogStreamer };
+[[gnu::no_sanitize_address]] LogStreamer* const g_logStreamer{ new LogStreamer };
 
 LogStreamer& GetLogStreamer() noexcept { return *g_logStreamer; }
 

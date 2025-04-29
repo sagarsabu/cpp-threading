@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -22,6 +23,8 @@ public:
 
     Level GetLogLevel() const noexcept { return m_logLevel; }
 
+    std::reference_wrapper<Stream> GetStream() const noexcept { return m_streamRef; }
+
 private:
     // Nothing in here is movable or copyable
     LogStreamer(const LogStreamer&) = delete;
@@ -40,15 +43,12 @@ private:
     static constexpr std::reference_wrapper<Stream> s_consoleStream{ std::cout };
 
     std::reference_wrapper<Stream> m_streamRef{ s_consoleStream };
-    std::recursive_mutex m_mutex{};
+    std::mutex m_streamSetMutex{};
     std::string m_logFilename{};
     Level m_logLevel{ Level::Info };
     size_t m_lostLogTime{ 0 };
     std::ofstream m_logFileStream{};
     std::unique_ptr<PeriodicTimer> m_logFileCreator{ nullptr };
-
-    template<typename... Args>
-    friend inline void LogToStream(Level level, std::format_string<Args...> fmt, Args&&... args);
 };
 
 LogStreamer& GetLogStreamer() noexcept;

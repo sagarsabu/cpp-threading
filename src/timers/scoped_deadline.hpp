@@ -14,8 +14,8 @@ struct ScopedDeadline final
 
     ~ScopedDeadline()
     {
-        auto now = Clock::now();
-        auto duration = std::chrono::duration_cast<TimeMS>(now - m_start);
+        const auto now{ Clock::now() };
+        const auto duration{ std::chrono::duration_cast<TimeMS>(now - m_start) };
         if (duration <= m_deadline)
         {
             LOG_TRACE("ScopedDeadline '{}' took:{}", m_tag, duration);

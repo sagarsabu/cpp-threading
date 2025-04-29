@@ -1,8 +1,10 @@
 #pragma once
 
 #include <format>
+#include <ostream>
 #include <print>
 #include <string>
+#include <syncstream>
 
 #include "log/log_stream.hpp"
 
@@ -47,23 +49,19 @@ template<typename... Args> inline void LogToStream(Level level, std::format_stri
 
     LogTimestamp ts{ GetCurrentTimeStamp() };
 
-    {
-        auto& logStreamer{ GetLogStreamer() };
-        std::lock_guard lock{ logStreamer.m_mutex };
-        LogStreamer::Stream& stream{ logStreamer.m_streamRef.get() };
-        std::println(
-            stream,
-            "{}[{}{}] [{}] [{}] {}{}",
-            GetLevelFormatter(level),
-            ts.m_s,
-            ts.m_ns,
-            CurrentThreadName(),
-            GetLevelName(level),
-            std::format(fmt, std::forward_like<Args>(args)...),
-            GetFormatEnd()
-        );
-        std::flush(stream);
-    }
+    std::osyncstream stream{ GetLogStreamer().GetStream() };
+    std::println(
+        stream,
+        "{}[{}{}] [{}] [{}] {}{}",
+        GetLevelFormatter(level),
+        ts.m_s,
+        ts.m_ns,
+        CurrentThreadName(),
+        GetLevelName(level),
+        std::format(fmt, std::forward_like<Args>(args)...),
+        GetFormatEnd()
+    );
+    std::flush(stream);
 }
 
 template<typename... Args> inline void Trace(std::format_string<Args...> fmt, Args&&... args)
