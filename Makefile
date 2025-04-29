@@ -2,11 +2,16 @@
 .PHONY: lint
 .PHONY: clean
 
-CXX:=$(shell which g++-14)
-export CXX
+CXX?=$(shell which g++)
 
 ifeq ($(CXX),)
-$(error Failed to find g++-14)
+$(error Failed to find g++)
+endif
+
+CXX_VERSION:=$(shell $(CXX) -dumpversion | cut -d. -f1)
+# Check if the version is at least 14
+ifeq ($(shell expr $(CXX_VERSION) \< 14), 1)
+$(error g++ version must be at least 14, but found $(CXX_VERSION))
 endif
 
 CMAKE=$(shell which cmake)
