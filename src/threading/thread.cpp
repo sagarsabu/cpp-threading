@@ -198,26 +198,24 @@ void Thread::ProcessEvents()
         if (threadEvent == nullptr) [[unlikely]]
         {
             LOG_ERROR("{} process-events received null event for receiver", Name());
+            continue;
         }
-        else
-        {
-            switch (threadEvent->Receiver())
-            {
-                case EventReceiver::Self:
-                {
-                    ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleSelfEvent",
-                                                   m_handleEventThreshold };
-                    HandleSelfEvent(std::move(threadEvent));
-                    break;
-                }
 
-                default:
-                {
-                    ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleTimer",
-                                                   m_handleEventThreshold };
-                    HandleEvent(std::move(threadEvent));
-                    break;
-                }
+        switch (threadEvent->Receiver())
+        {
+            case EventReceiver::Self:
+            {
+                ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleSelfEvent",
+                                               m_handleEventThreshold };
+                HandleSelfEvent(std::move(threadEvent));
+                break;
+            }
+
+            default:
+            {
+                ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleTimer", m_handleEventThreshold };
+                HandleEvent(std::move(threadEvent));
+                break;
             }
         }
     }

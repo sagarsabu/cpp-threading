@@ -25,7 +25,7 @@ Timer::Timer(const std::string& name, const TimeNS& startDelta, const TimeNS& pe
     signalEvent.sigev_notify = SIGEV_THREAD_ID;
     signalEvent._sigev_un._tid = gettid();
     // The signal data to be used from the signal handler
-    signalEvent.sigev_value.sival_ptr = const_cast<SigValData*>(&m_signalData);
+    signalEvent.sigev_value.sival_ptr = &m_signalData;
     // setup signal handler
     signalAction.sa_flags = SA_SIGINFO;
     // Set the callback for the signal

@@ -62,7 +62,7 @@ private:
     const itimerspec m_timerInterval;
     const TimerCallback m_callback;
     const std::string m_name{ "Unknown" };
-    const SigValData m_signalData;
+    SigValData m_signalData;
 
 private:
     static constexpr itimerspec DISABLED_TIMER{ .it_interval = ChronoTimeToTimeSpec(0ns),
