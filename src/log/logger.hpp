@@ -3,6 +3,7 @@
 #include <format>
 #include <ostream>
 #include <print>
+#include <source_location>
 #include <string>
 #include <syncstream>
 
@@ -18,6 +19,19 @@ void SetupLogger(const std::string& filename = "", Level logLevel = Level::Info)
 
 namespace Internal
 {
+
+constexpr std::string_view GetFilenameStem(std::string_view fileName) noexcept
+{
+    std::string_view fnameStem{ fileName };
+    const size_t pos{ fnameStem.find_last_of('/') };
+
+    if (pos == std::string_view::npos)
+    {
+        return fnameStem;
+    }
+
+    return fnameStem.substr(pos + 1);
+}
 
 std::string_view GetLevelFormatter(Level level) noexcept;
 
@@ -42,7 +56,8 @@ std::string_view CurrentThreadName() noexcept;
 
 inline bool ShouldLog(Level level) noexcept { return level >= GetLogStreamer().GetLogLevel(); }
 
-template<typename... Args> inline void LogToStream(Level level, std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args>
+inline void LogToStream(Level level, const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
 {
     if (not Internal::ShouldLog(level))
         return;
@@ -52,46 +67,54 @@ template<typename... Args> inline void LogToStream(Level level, std::format_stri
     std::osyncstream stream{ GetLogStreamer().GetStream() };
     std::println(
         stream,
-        "{}[{}{}] [{}] [{}] {}{}",
+        "{}[{}{}] [{}] [{}] [{}:{}] {}{}",
         GetLevelFormatter(level),
         ts.m_s,
         ts.m_ns,
         CurrentThreadName(),
         GetLevelName(level),
+        GetFilenameStem(loc.file_name()),
+        loc.line(),
         std::format(fmt, std::forward_like<Args>(args)...),
         GetFormatEnd()
     );
     std::flush(stream);
 }
 
-template<typename... Args> inline void Trace(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args>
+inline void Trace(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
 {
-    Logger::Internal::LogToStream(Logger::Trace, fmt, std::forward_like<Args>(args)...);
+    Logger::Internal::LogToStream(Logger::Trace, loc, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename... Args> inline void Debug(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args>
+inline void Debug(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
 {
-    Logger::Internal::LogToStream(Logger::Debug, fmt, std::forward_like<Args>(args)...);
+    Logger::Internal::LogToStream(Logger::Debug, loc, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename... Args> inline void Info(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args>
+inline void Info(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
 {
-    Logger::Internal::LogToStream(Logger::Info, fmt, std::forward_like<Args>(args)...);
+    Logger::Internal::LogToStream(Logger::Info, loc, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename... Args> inline void Warning(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args>
+inline void Warning(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
 {
-    Logger::Internal::LogToStream(Logger::Warning, fmt, std::forward_like<Args>(args)...);
+    Logger::Internal::LogToStream(Logger::Warning, loc, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename... Args> inline void Error(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args>
+inline void Error(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
 {
-    Logger::Internal::LogToStream(Logger::Error, fmt, std::forward_like<Args>(args)...);
+    Logger::Internal::LogToStream(Logger::Error, loc, fmt, std::forward_like<Args>(args)...);
 }
 
-template<typename... Args> inline void Critical(std::format_string<Args...> fmt, Args&&... args)
+template<typename... Args>
+inline void Critical(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
 {
-    Logger::Internal::LogToStream(Logger::Critical, fmt, std::forward_like<Args>(args)...);
+    Logger::Internal::LogToStream(Logger::Critical, loc, fmt, std::forward_like<Args>(args)...);
 }
 
 } // namespace Internal
@@ -104,16 +127,16 @@ template<typename... Args> inline void Critical(std::format_string<Args...> fmt,
 
 #define LOG_TRACE(fmt, ...)                                                                                            \
     if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Trace)) [[unlikely]]                                           \
-    Sage::Logger::Internal::Trace(fmt, ##__VA_ARGS__)
+    Sage::Logger::Internal::Trace(std::source_location::current(), fmt, ##__VA_ARGS__)
 
 #define LOG_DEBUG(fmt, ...)                                                                                            \
     if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Debug)) [[unlikely]]                                           \
-    Sage::Logger::Internal::Debug(fmt, ##__VA_ARGS__)
+    Sage::Logger::Internal::Debug(std::source_location::current(), fmt, ##__VA_ARGS__)
 
-#define LOG_INFO(fmt, ...) Sage::Logger::Internal::Info(fmt, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...) Sage::Logger::Internal::Info(std::source_location::current(), fmt, ##__VA_ARGS__)
 
-#define LOG_WARNING(fmt, ...) Sage::Logger::Internal::Warning(fmt, ##__VA_ARGS__)
+#define LOG_WARNING(fmt, ...) Sage::Logger::Internal::Warning(std::source_location::current(), fmt, ##__VA_ARGS__)
 
-#define LOG_ERROR(fmt, ...) Sage::Logger::Internal::Error(fmt, ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...) Sage::Logger::Internal::Error(std::source_location::current(), fmt, ##__VA_ARGS__)
 
-#define LOG_CRITICAL(fmt, ...) Sage::Logger::Internal::Critical(fmt, ##__VA_ARGS__)
+#define LOG_CRITICAL(fmt, ...) Sage::Logger::Internal::Critical(std::source_location::current(), fmt, ##__VA_ARGS__)

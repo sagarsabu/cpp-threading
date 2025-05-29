@@ -117,7 +117,7 @@ void LogStreamer::SetStreamToFile(std::ofstream fileStream)
  * Intentionally leaking here.
  * Logging in global object destructor's may cause issue if we destroy the logger
  */
-[[gnu::no_sanitize_address]] LogStreamer* const g_logStreamer{ new LogStreamer };
+LogStreamer* const g_logStreamer{ new LogStreamer };
 
 LogStreamer& GetLogStreamer() noexcept { return *g_logStreamer; }
 
