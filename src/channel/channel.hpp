@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "log/logger.hpp"
-#include "timers/timer.hpp"
+#include "timers/time_utils.hpp"
 
 namespace Sage::Channel
 {
@@ -155,11 +155,17 @@ public:
         sem.release();
     }
 
-    void send(std::unique_ptr<T> t)
+    void send(std::unique_ptr<T> t, bool logOnDrop = true)
     {
         {
             std::scoped_lock lk{ m_notifier->m_queueMtx };
-            LOG_RETURN_IF(m_notifier->m_rxDisconnected, LOG_WARNING);
+            bool dropped{ m_notifier->m_rxDisconnected };
+
+            if (dropped)
+            {
+                LOG_IF(logOnDrop, LOG_WARNING);
+                return;
+            }
 
             auto& queue{ m_notifier->m_queue };
             queue.emplace_back(std::move(t));

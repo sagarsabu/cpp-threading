@@ -219,7 +219,7 @@ void Thread::Enter(std::unique_ptr<Channel::Rx<ThreadEvent>> rx)
     // stop all timers
     for (const auto& [timerId, _] : m_timers)
     {
-        m_timerThread.RequestTimerStop(timerId);
+        m_timerThread.RequestTimerStop(timerId, false);
     }
 
     m_running = false;

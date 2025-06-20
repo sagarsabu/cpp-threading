@@ -47,13 +47,13 @@ void TimerThread::RequestTimerUpdate(TimerEventId id, const TimeNS& timeout)
     m_tx->send(std::move(e));
 }
 
-void TimerThread::RequestTimerStop(TimerEventId id)
+void TimerThread::RequestTimerStop(TimerEventId id, bool logOnDrop)
 {
     LOG_DEBUG("requesting to stop timer:{}", id);
 
     auto e{ std::make_unique<TimerStopEvent>() };
     e->m_timerToStop = id;
-    m_tx->send(std::move(e));
+    m_tx->send(std::move(e), logOnDrop);
 }
 
 void TimerThread::Run(std::unique_ptr<Channel::Rx<TimerEvent>> rx)
@@ -121,6 +121,8 @@ void TimerThread::Run(std::unique_ptr<Channel::Rx<TimerEvent>> rx)
     }
 
     LOG_INFO("timer thread stopped");
+
+    m_stopLatch.count_down();
 }
 
 // Queuing

@@ -50,7 +50,7 @@ target_compile_options(cpp-threading PRIVATE
 
 target_compile_definitions(cpp-threading PRIVATE
     # force use of posix semaphores
-    _GLIBCXX_USE_POSIX_SEMAPHORE=1
+    # _GLIBCXX_USE_POSIX_SEMAPHORE=1
 )
 
 target_include_directories(cpp-threading PRIVATE

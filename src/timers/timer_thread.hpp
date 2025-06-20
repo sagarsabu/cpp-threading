@@ -81,11 +81,17 @@ public:
 
     void Start() { m_startLatch.count_down(); }
 
+    void Stop()
+    {
+        m_thread.request_stop();
+        m_stopLatch.wait();
+    };
+
     TimerEventId RequestTimerAdd(const TimeNS& timeout, SharedThreadTx tx);
 
     void RequestTimerUpdate(TimerEventId, const TimeNS& timeout);
 
-    void RequestTimerStop(TimerEventId);
+    void RequestTimerStop(TimerEventId, bool logOnDrop = false);
 
 private:
     TimerThread(const TimerThread&) = delete;
@@ -132,6 +138,7 @@ private:
     std::unordered_map<TimerEventId, SharedThreadTx> m_txs;
     std::shared_ptr<Channel::Tx<TimerEvent>> m_tx;
     std::latch m_startLatch{ 1 };
+    std::latch m_stopLatch{ 1 };
     std::jthread m_thread;
 };
 

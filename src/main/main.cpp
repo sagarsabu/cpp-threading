@@ -114,11 +114,20 @@ int main(int argc, char** const argv)
 
         LOG_INFO("==== starting ====");
 
+        TimerThread* timerThreadPtr{ nullptr };
         ManagerThread* managerPtr{ nullptr };
         std::jthread exitHandler = ExitHandler::Create(
-            [&managerPtr]
+            [&timerThreadPtr, &managerPtr]
             {
                 LOG_INFO("exit-handle triggered");
+
+                if (timerThreadPtr != nullptr)
+                {
+                    // only stop it once
+                    timerThreadPtr->Stop();
+                    timerThreadPtr = nullptr;
+                }
+
                 if (managerPtr != nullptr)
                 {
                     managerPtr->RequestShutdown();
@@ -127,6 +136,8 @@ int main(int argc, char** const argv)
         );
 
         TimerThread timerThread;
+        timerThreadPtr = &timerThread;
+
         timerThread.Start();
 
         ManagerThread manager{ timerThread };
