@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <latch>
 #include <memory>
 #include <string>
@@ -9,9 +10,10 @@
 
 #include "channel/channel.hpp"
 #include "threading/events.hpp"
-#include "timers/timer.hpp"
+#include "timers/time_utils.hpp"
+#include "timers/timer_thread.hpp"
 
-namespace Sage::Threading
+namespace Sage
 {
 
 // Aliases
@@ -21,8 +23,16 @@ using UniqueThreadEvent = std::unique_ptr<ThreadEvent>;
 class Thread
 {
 public:
+    using TimerExpiredCb = std::move_only_function<void()>;
+
+    struct TimerData
+    {
+        std::string name;
+        TimerExpiredCb cb;
+    };
+
     Thread(
-        const std::string& threadName, const TimeMS& handleEventThreshold = 20ms,
+        const std::string& threadName, TimerThread& timerThread, const TimeMS& handleEventThreshold = 20ms,
         // must always be last
         Channel::ChannelPair<ThreadEvent> channel = Channel::MakeChannel<ThreadEvent>()
     );
@@ -48,15 +58,9 @@ protected:
 
     virtual void HandleEvent(UniqueThreadEvent event) = 0;
 
-    void AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period);
+    TimerEventId StartTimer(const std::string& name, const TimeMS& timeout, TimerExpiredCb cb);
 
-    void AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta);
-
-    void RemoveTimer(TimerEvent::EventID timerEventId);
-
-    void StartTimer(TimerEvent::EventID timerEventId) const;
-
-    void StopTimer(TimerEvent::EventID timerEventId) const;
+    void StopTimer(TimerEventId timerEventId);
 
 private:
     // Not copyable or movable
@@ -80,12 +84,12 @@ private:
     const std::string m_threadName;
     std::shared_ptr<Channel::Tx<ThreadEvent>> m_tx;
     const TimeMS m_handleEventThreshold;
-    std::unordered_map<TimerEvent::EventID, std::unique_ptr<Timer>> m_timers{};
+    std::unordered_map<TimerEventId, TimerData> m_timers{};
     std::atomic<int> m_exitCode{ 0 };
     std::latch m_startLatch{ 1 };
     std::atomic<bool> m_running{ false };
     std::atomic<bool> m_stopping{ false };
-    std::unique_ptr<FireOnceTimer> m_stopTimer{ nullptr };
+    TimerThread& m_timerThread;
 
     // must always be last
     std::jthread m_thread;
@@ -96,4 +100,4 @@ private:
     static constexpr TimeMS PROCESS_EVENTS_WAIT_TIMEOUT{ 100ms };
 };
 
-} // namespace Sage::Threading
+} // namespace Sage

@@ -6,9 +6,9 @@
 
 #include "threading/events.hpp"
 #include "threading/thread.hpp"
-#include "timers/timer.hpp"
+#include "timers/time_utils.hpp"
 
-namespace Sage::Threading
+namespace Sage
 {
 
 // Manager events
@@ -61,7 +61,7 @@ public:
     static constexpr inline TimeMS DEFAULT_TRANSMIT_PERIOD{ 15ms };
 
 public:
-    ManagerThread();
+    explicit ManagerThread(TimerThread& timerThread);
 
     void AttachWorker(Thread* worker);
 
@@ -94,8 +94,9 @@ private:
     std::atomic<bool> m_workersTerminated{ false };
     std::binary_semaphore m_shutdownInitiateSignal{ 0 };
     std::binary_semaphore m_shutdownInitiatedSignal{ 0 };
+    TimerEventId m_transmitTimerId{ 0 };
     TimeMS m_transmitPeriod{ DEFAULT_TRANSMIT_PERIOD };
     TimeMS m_testTimeout{ DEFAULT_TEST_TIMEOUT };
 };
 
-} // namespace Sage::Threading
+} // namespace Sage

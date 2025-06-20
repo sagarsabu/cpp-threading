@@ -2,20 +2,19 @@
 #include "log/logger.hpp"
 #include "main/manager_thread.hpp"
 
-namespace Sage::Threading
+namespace Sage
 {
 
 // Worker thread
 
-WorkerThread::WorkerThread() : Thread{ std::string("WkrThread-") + std::to_string(++s_id) } {}
+WorkerThread::WorkerThread(TimerThread& timerThread) :
+    Thread{ std::string("WkrThread-") + std::to_string(++s_id), timerThread }
+{
+}
 
 void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
-    if (threadEvent->Receiver() != EventReceiver::WorkerThread) [[unlikely]]
-    {
-        LOG_ERROR("{} handle-event got event intended for receiver:{}", Name(), threadEvent->ReceiverName());
-        return;
-    }
+    LOG_RETURN_IF(threadEvent->Receiver() != EventReceiver::WorkerThread, LOG_ERROR);
 
     auto& event = static_cast<ManagerEvent&>(*threadEvent);
     switch (event.Type())
@@ -36,4 +35,4 @@ void WorkerThread::HandleEvent(UniqueThreadEvent threadEvent)
     }
 }
 
-} // namespace Sage::Threading
+} // namespace Sage

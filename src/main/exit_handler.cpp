@@ -1,6 +1,7 @@
 #include <array>
 #include <csignal>
 #include <cstring>
+#include <utility>
 
 #include "log/logger.hpp"
 #include "main/exit_handler.hpp"
@@ -22,7 +23,7 @@ std::jthread Create(ExitHandle&& theExitHandle)
     sigset_t signalsToBlock{};
     sigemptyset(&signalsToBlock);
 
-    constexpr std::array exitSignals{ SIGINT, SIGQUIT, SIGHUP, SIGTERM };
+    static constexpr std::array exitSignals{ SIGINT, SIGQUIT, SIGHUP, SIGTERM };
     for (auto sig : exitSignals)
     {
         sigaddset(&signalsToBlock, sig);
@@ -41,8 +42,8 @@ std::jthread Create(ExitHandle&& theExitHandle)
     {
         pthread_setname_np(pthread_self(), "ExitHandler");
 
-        constexpr auto shutdownThreshold{ 5s };
-        constexpr auto shutdownTick{ 500ms };
+        static constexpr auto shutdownThreshold{ 5s };
+        static constexpr auto shutdownTick{ 500ms };
         PeriodicTimer shutdownTimer(
             "ExitHandlerShutdownTimer",
             shutdownTick,
@@ -68,7 +69,7 @@ std::jthread Create(ExitHandle&& theExitHandle)
         LOG_INFO("exit-handler waiting for exit signal");
 
         bool triggered{ false };
-        constexpr timespec sigWaitTimeout{ ChronoTimeToTimeSpec(100ms) };
+        static constexpr timespec sigWaitTimeout{ ChronoTimeToTimeSpec(100ms) };
 
         while (not stopToken.stop_requested())
         {
@@ -81,7 +82,7 @@ std::jthread Create(ExitHandle&& theExitHandle)
                     // timeout
                     case EAGAIN:
                         break;
-
+                    // woken by interrupt
                     case EINTR:
                         break;
 

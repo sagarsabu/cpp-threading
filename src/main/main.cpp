@@ -8,10 +8,11 @@
 #include "main/exit_handler.hpp"
 #include "main/manager_thread.hpp"
 #include "main/worker_thread.hpp"
+#include "timers/timer_thread.hpp"
 
 using namespace Sage;
 
-auto GetCLiArgs(int argc, char** const argv)
+auto GetCliArgs(int argc, char** const argv)
 {
     static const option argOptions[]{
         { "help",  no_argument,       nullptr, 'h' },
@@ -106,14 +107,14 @@ int main(int argc, char** const argv)
 
     try
     {
-        auto [logLevel, logFile]{ GetCLiArgs(argc, argv) };
+        auto [logLevel, logFile]{ GetCliArgs(argc, argv) };
 
         // Setup logging
         Logger::SetupLogger(logFile, logLevel);
 
         LOG_INFO("==== starting ====");
 
-        Threading::ManagerThread* managerPtr{ nullptr };
+        ManagerThread* managerPtr{ nullptr };
         std::jthread exitHandler = ExitHandler::Create(
             [&managerPtr]
             {
@@ -125,13 +126,16 @@ int main(int argc, char** const argv)
             }
         );
 
-        Threading::ManagerThread manager;
+        TimerThread timerThread;
+        timerThread.Start();
+
+        ManagerThread manager{ timerThread };
         managerPtr = &manager;
 
         manager.SetTransmitPeriod(20ms);
         manager.Start();
 
-        std::array<Threading::WorkerThread, 2> workers;
+        std::array workers{ WorkerThread{ timerThread }, WorkerThread{ timerThread } };
         for (auto& worker : workers)
         {
             worker.Start();

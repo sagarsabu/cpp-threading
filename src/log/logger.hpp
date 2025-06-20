@@ -117,6 +117,8 @@ inline void Critical(const std::source_location& loc, std::format_string<Args...
     Logger::Internal::LogToStream(Logger::Critical, loc, fmt, std::forward_like<Args>(args)...);
 }
 
+constexpr void Noop() {}
+
 } // namespace Internal
 
 } // namespace Logger
@@ -140,3 +142,31 @@ inline void Critical(const std::source_location& loc, std::format_string<Args...
 #define LOG_ERROR(fmt, ...) Sage::Logger::Internal::Error(std::source_location::current(), fmt, ##__VA_ARGS__)
 
 #define LOG_CRITICAL(fmt, ...) Sage::Logger::Internal::Critical(std::source_location::current(), fmt, ##__VA_ARGS__)
+
+#define LOG_IF(check, logMacro)                                                                                        \
+    if ((check)) [[unlikely]]                                                                                          \
+    logMacro("#### " #check " #### - check failed")
+
+#define LOG_RETURN_IF(check, logMacro)                                                                                 \
+    if ((check)) [[unlikely]]                                                                                          \
+    {                                                                                                                  \
+        logMacro("#### " #check " #### - check failed");                                                               \
+        return;                                                                                                        \
+    }                                                                                                                  \
+    Sage::Logger::Internal::Noop()
+
+#define LOG_RETURN_FALSE_IF(check, logMacro)                                                                           \
+    if ((check)) [[unlikely]]                                                                                          \
+    {                                                                                                                  \
+        logMacro("#### " #check " #### - check failed");                                                               \
+        return false;                                                                                                  \
+    }                                                                                                                  \
+    Sage::Logger::Internal::Noop()
+
+#define LOG_RETURN_NULL_IF(check, logMacro)                                                                            \
+    if ((check)) [[unlikely]]                                                                                          \
+    {                                                                                                                  \
+        logMacro("#### " #check " #### - check failed");                                                               \
+        return nullptr;                                                                                                \
+    }                                                                                                                  \
+    Sage::Logger::Internal::Noop()

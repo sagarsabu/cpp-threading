@@ -3,10 +3,9 @@
 
 #include "log/logger.hpp"
 #include "main/manager_thread.hpp"
-
 #include "threading/events.hpp"
 
-namespace Sage::Threading
+namespace Sage
 {
 
 enum ManagerTimerEvent
@@ -14,7 +13,7 @@ enum ManagerTimerEvent
     TransmitWork
 };
 
-ManagerThread::ManagerThread() : Thread{ "MngrThread" } {}
+ManagerThread::ManagerThread(TimerThread& timerThread) : Thread{ "MngrThread", timerThread } {}
 
 void ManagerThread::AttachWorker(Thread* worker)
 {
@@ -106,11 +105,7 @@ void ManagerThread::SendEventsToWorkers()
 {
     std::lock_guard lock{ m_workersMtx };
 
-    if (m_workersTerminated) [[unlikely]]
-    {
-        LOG_WARNING("{} workers terminated", Name());
-        return;
-    }
+    LOG_RETURN_IF(m_workersTerminated, LOG_WARNING);
 
     for (auto worker : m_workers)
     {
@@ -124,16 +119,12 @@ void ManagerThread::TeardownWorkers()
 {
     std::lock_guard lock{ m_workersMtx };
 
-    if (m_workersTerminated)
-    {
-        LOG_CRITICAL("{} workers termination has already been requested", Name());
-        return;
-    }
+    LOG_RETURN_IF(m_workersTerminated, LOG_CRITICAL);
 
     m_workersTerminated = true;
 
     LOG_INFO("{} stopping transmit timer", Name());
-    RemoveTimer(ManagerTimerEvent::TransmitWork);
+    StopTimer(m_transmitTimerId);
 
     LOG_INFO("{} tearing down all workers", Name());
     for (auto worker : m_workers)
@@ -167,36 +158,13 @@ bool ManagerThread::WorkersRunning()
 void ManagerThread::Starting()
 {
     LOG_INFO("{} setting up periodic timer for self transmitting", Name());
-
-    AddPeriodicTimer(ManagerTimerEvent::TransmitWork, m_transmitPeriod);
-    StartTimer(ManagerTimerEvent::TransmitWork);
+    m_transmitTimerId = StartTimer("Manager-Transmit", m_transmitPeriod, [this] { SendEventsToWorkers(); });
 }
 
 void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
 {
     switch (threadEvent->Receiver())
     {
-        case EventReceiver::Timer:
-        {
-            const auto& event = static_cast<const TimerEvent&>(*threadEvent);
-            switch (event.Type())
-            {
-                case ManagerTimerEvent::TransmitWork:
-                {
-                    SendEventsToWorkers();
-                    break;
-                }
-
-                default:
-                {
-                    LOG_ERROR("{} handle-event got unkown timer event:{}", Name(), event.Type());
-                    break;
-                }
-            }
-
-            break;
-        }
-
         case EventReceiver::ManagerThread:
         {
 
@@ -227,4 +195,4 @@ void ManagerThread::HandleEvent(UniqueThreadEvent threadEvent)
     }
 }
 
-} // namespace Sage::Threading
+} // namespace Sage

@@ -2,7 +2,7 @@
 
 #include "threading/thread.hpp"
 
-namespace Sage::Threading
+namespace Sage
 {
 
 // Worker thread
@@ -10,7 +10,7 @@ namespace Sage::Threading
 class WorkerThread final : public Thread
 {
 public:
-    WorkerThread();
+    explicit WorkerThread(TimerThread& timerThread);
 
 private:
     void HandleEvent(UniqueThreadEvent threadEvent) override;
@@ -18,4 +18,4 @@ private:
 private:
     static inline std::atomic<uint> s_id{ 0 };
 };
-} // namespace Sage::Threading
+} // namespace Sage

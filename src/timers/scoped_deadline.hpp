@@ -3,7 +3,7 @@
 #include <chrono>
 
 #include "log/logger.hpp"
-#include "timers/timer.hpp"
+#include "timers/time_utils.hpp"
 
 namespace Sage
 {

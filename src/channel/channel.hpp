@@ -16,6 +16,8 @@ namespace Sage::Channel
 
 template<typename T> struct Notifier
 {
+    ~Notifier() { LOG_DEBUG("dropped"); }
+
     std::binary_semaphore m_notify{ 0 };
     std::recursive_mutex m_queueMtx{};
     std::deque<std::unique_ptr<T>> m_queue{};
@@ -29,10 +31,16 @@ template<typename T> class Rx
 public:
     explicit Rx(SharedNotifier<T> notifier) : m_notifier{ std::move(notifier) }
     {
+        std::scoped_lock lk{ m_notifier->m_queueMtx };
         m_notifier->m_rxDisconnected = false;
     }
 
-    ~Rx() { m_notifier->m_rxDisconnected = true; }
+    ~Rx()
+    {
+        LOG_DEBUG("rx dropped");
+        std::scoped_lock lk{ m_notifier->m_queueMtx };
+        m_notifier->m_rxDisconnected = true;
+    }
 
     std::unique_ptr<T> receive()
     {
@@ -141,6 +149,7 @@ public:
 
     ~Tx()
     {
+        LOG_DEBUG("dropped");
         // notify on destruction, so any waiters are woken
         std::binary_semaphore& sem{ m_notifier->m_notify };
         sem.release();
@@ -150,11 +159,7 @@ public:
     {
         {
             std::scoped_lock lk{ m_notifier->m_queueMtx };
-            if (m_notifier->m_rxDisconnected)
-            {
-                LOG_WARNING("rx disconnected on send");
-                return;
-            }
+            LOG_RETURN_IF(m_notifier->m_rxDisconnected, LOG_WARNING);
 
             auto& queue{ m_notifier->m_queue };
             queue.emplace_back(std::move(t));
@@ -168,11 +173,7 @@ public:
     {
         {
             std::scoped_lock lk{ m_notifier->m_queueMtx };
-            if (m_notifier->m_rxDisconnected)
-            {
-                LOG_WARNING("rx disconnected on send");
-                return;
-            }
+            LOG_RETURN_IF(m_notifier->m_rxDisconnected, LOG_WARNING);
 
             auto& queue{ m_notifier->m_queue };
             queue.clear();

@@ -28,6 +28,7 @@ CPPCHECK_PARAMS=\
 	--inconclusive --force --inline-suppr \
 	--enable=all \
 	--suppress=funcArgNamesDifferent \
+	--suppress=unusedFunction \
 	--suppress=missingIncludeSystem \
 	--suppress=checkersReport \
 	--checkers-report=$(LINT_DIR)/details.txt \

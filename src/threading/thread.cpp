@@ -1,22 +1,26 @@
-#include "threading/thread.hpp"
-#include "channel/channel.hpp"
-#include "log/logger.hpp"
-#include "threading/events.hpp"
-#include "timers/scoped_deadline.hpp"
-
 #include <algorithm>
+#include <atomic>
 #include <memory>
 #include <utility>
 
-namespace Sage::Threading
+#include "channel/channel.hpp"
+#include "log/logger.hpp"
+#include "threading/events.hpp"
+#include "threading/thread.hpp"
+#include "timers/scoped_deadline.hpp"
+#include "timers/timer_thread.hpp"
+
+namespace Sage
 {
 
 Thread::Thread(
-    const std::string& threadName, const TimeMS& handleEventThreshold, Channel::ChannelPair<ThreadEvent> channel
+    const std::string& threadName, TimerThread& timerThread, const TimeMS& handleEventThreshold,
+    Channel::ChannelPair<ThreadEvent> channel
 ) :
     m_threadName{ threadName },
     m_tx{ std::move(channel.tx) },
     m_handleEventThreshold{ handleEventThreshold },
+    m_timerThread{ timerThread },
     m_thread{ &Thread::Enter, this, std::move(channel.rx) }
 {
     LOG_DEBUG("{} c'tor", Name());
@@ -32,7 +36,7 @@ void Thread::Start()
 
 void Thread::Stop()
 {
-    LOG_INFO("{} stop requested", Name());
+    LOG_DEBUG("{} stop requested", Name());
 
     if (m_stopping)
     {
@@ -49,103 +53,44 @@ void Thread::Stop()
 
 void Thread::TransmitEvent(UniqueThreadEvent event)
 {
-    if (m_stopping) [[unlikely]]
-    {
-        LOG_CRITICAL("{} transmit-event dropped event for receiver:{}", Name(), event->ReceiverName());
-        return;
-    }
-
+    LOG_RETURN_IF(m_stopping.load(std::memory_order_relaxed), LOG_CRITICAL);
     m_tx->send(std::move(event));
 }
 
-void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
+TimerEventId Thread::StartTimer(const std::string& name, const TimeMS& timeout, TimerExpiredCb cb)
 {
-    auto itr = m_timers.find(timerEventId);
-    if (itr != m_timers.end())
-    {
-        LOG_ERROR("{} add-periodic-timer timer-event-id:{} already exists", Name(), timerEventId);
-        return;
-    }
-
-    const std::string timerName{ m_threadName + "-Periodic-" + std::to_string(timerEventId) };
-    m_timers[timerEventId] = std::make_unique<PeriodicTimer>(
-        timerName, period, [this, timerEventId] { TransmitEvent(std::make_unique<TimerEvent>(timerEventId)); }
-    );
+    TimerEventId eId{ m_timerThread.RequestTimerAdd(timeout, m_tx) };
+    m_timers[eId] = { .name = name, .cb = std::move(cb) };
+    LOG_DEBUG("{} start-timer timer-event-id:{} timer-name:{}", Name(), eId, name);
+    return eId;
 }
 
-// cppcheck-suppress unusedFunction
-void Thread::AddFireOnceTimer(TimerEvent::EventID timerEventId, TimeNS delta)
+void Thread::StopTimer(TimerEventId timerEventId)
 {
     auto itr = m_timers.find(timerEventId);
-    if (itr != m_timers.end())
-    {
-        LOG_ERROR("{} add-fire-once-timer timer-event-id:{} already exists", Name(), timerEventId);
-        return;
-    }
+    LOG_RETURN_IF(itr == m_timers.end(), LOG_ERROR);
 
-    const std::string timerName{ m_threadName + "-FireOnce-" + std::to_string(timerEventId) };
-    m_timers[timerEventId] = std::make_unique<FireOnceTimer>(
-        timerName, delta, [this, timerEventId] { TransmitEvent(std::make_unique<TimerEvent>(timerEventId)); }
-    );
-}
-
-void Thread::RemoveTimer(TimerEvent::EventID timerEventId)
-{
-    auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end())
-    {
-        LOG_ERROR("{} remove-timer timer-event-id:{} does not exist", Name(), timerEventId);
-        return;
-    }
-
+    LOG_DEBUG("{} stop-timer timer-event-id:{} timer-name:{}", Name(), timerEventId, itr->second.name);
     m_timers.erase(itr);
-}
 
-void Thread::StartTimer(TimerEvent::EventID timerEventId) const
-{
-    auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end())
-    {
-        LOG_ERROR("{} start-timer timer-event-id:{} does not exist", Name(), timerEventId);
-        return;
-    }
-
-    LOG_DEBUG("{} start-timer timer-event-id:{} timer-name:{}", Name(), timerEventId, itr->second->Name());
-    itr->second->Start();
-}
-
-// cppcheck-suppress unusedFunction
-void Thread::StopTimer(TimerEvent::EventID timerEventId) const
-{
-    auto itr = m_timers.find(timerEventId);
-    if (itr == m_timers.end())
-    {
-        LOG_ERROR("{} stop-timer timer-event-id:{} does not exist", Name(), timerEventId);
-        return;
-    }
-
-    LOG_DEBUG("{} stop-timer timer-event-id:{} timer-name:{}", Name(), timerEventId, itr->second->Name());
-    itr->second->Stop();
+    m_timerThread.RequestTimerStop(timerEventId);
 }
 
 int Thread::Execute(std::unique_ptr<Channel::Rx<ThreadEvent>> rx)
 {
-    std::atomic<bool> readyToExit{ false };
     std::stop_token stopToken{ m_thread.get_stop_token() };
     // Will be execute on this thread via exit event handling
     std::stop_callback stopCb(
         stopToken,
-        [this, &readyToExit, &rx]
+        [this, &rx]
         {
-            LOG_INFO("{} stop callback triggered", Name());
-
-            readyToExit = true;
+            LOG_DEBUG("{} stop callback triggered", Name());
             // notify ourselves to wake up
             rx->wakeImmediately();
         }
     );
 
-    while (not readyToExit)
+    while (not stopToken.stop_requested())
     {
         ProcessEvents(*rx);
     }
@@ -182,6 +127,20 @@ void Thread::ProcessEvents(Channel::Rx<ThreadEvent>& rx)
                 break;
             }
 
+            case EventReceiver::TimerExpired:
+            {
+                const auto& e{ static_cast<const TimerExpiredEvent&>(*threadEvent) };
+                if (auto itr{ m_timers.find(e.m_timerId) }; itr != m_timers.end())
+                {
+                    (itr->second.cb)();
+                }
+                else
+                {
+                    LOG_WARNING("got timer expiry for unknown timer-id:{}", e.m_timerId);
+                }
+                break;
+            }
+
             default:
             {
                 ScopedDeadline handleDeadline{ m_threadName + "@ProcessEvents::HandleTimer", m_handleEventThreshold };
@@ -211,11 +170,7 @@ void Thread::ProcessEvents(Channel::Rx<ThreadEvent>& rx)
 
 void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
 {
-    if (threadEvent->Receiver() != EventReceiver::Self) [[unlikely]]
-    {
-        LOG_CRITICAL("{} handle-self-event got event from unexpected receiver:{}", Name(), threadEvent->ReceiverName());
-        return;
-    }
+    LOG_RETURN_IF(threadEvent->Receiver() != EventReceiver::Self, LOG_CRITICAL);
 
     const auto& event = static_cast<const SelfEvent&>(*threadEvent);
     switch (event.Type())
@@ -223,23 +178,15 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
         case SelfEvent::Exit:
         {
             LOG_INFO("{} received exit event. requesting stop.", Name());
-            // Trigger via timer so we return out of the main processing loop
-            m_stopTimer = std::make_unique<FireOnceTimer>(
-                m_threadName + "-ExitTimer",
-                1ms,
-                [this]
-                {
-                    if (m_thread.request_stop())
-                    {
-                        LOG_INFO("{} stop request has been executed", Name());
-                    }
-                    else
-                    {
-                        LOG_CRITICAL("{} stop request failed to executed", Name());
-                    }
-                }
-            );
-            m_stopTimer->Start();
+            // will invoke the stop token callback and wake up immediately on the next loop
+            if (m_thread.request_stop())
+            {
+                LOG_DEBUG("{} stop request has been executed", Name());
+            }
+            else
+            {
+                LOG_CRITICAL("{} stop request failed to executed", Name());
+            }
             break;
         }
 
@@ -269,7 +216,13 @@ void Thread::Enter(std::unique_ptr<Channel::Rx<ThreadEvent>> rx)
     LOG_INFO("{} stopping", Name());
     Stopping();
 
+    // stop all timers
+    for (const auto& [timerId, _] : m_timers)
+    {
+        m_timerThread.RequestTimerStop(timerId);
+    }
+
     m_running = false;
 }
 
-} // namespace Sage::Threading
+} // namespace Sage
