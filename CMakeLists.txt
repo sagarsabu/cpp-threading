@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+find_package(Threads REQUIRED)
+find_library(LIB_RT NAMES rt REQUIRED)
+
 file(GLOB_RECURSE SRCS
     src/**.cpp
 )
@@ -26,8 +29,10 @@ target_compile_options(cpp-threading PRIVATE
     -Wpedantic
 )
 
-find_package(Threads REQUIRED)
-find_library(LIB_RT NAMES rt REQUIRED)
+target_compile_definitions(cpp-threading PRIVATE
+    # force use of poxix sempahores
+    _GLIBCXX_USE_POSIX_SEMAPHORE=1
+)
 
 target_include_directories(cpp-threading PRIVATE
     src/

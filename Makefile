@@ -34,7 +34,7 @@ CPPCHECK_PARAMS=\
 	--check-level=exhaustive \
 	-I $(CURDIR)/src/
 
-.DEFAULT_GOAL=release
+.DEFAULT_GOAL=debug
 
 all: release debug
 
