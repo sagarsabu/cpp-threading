@@ -3,13 +3,11 @@
 #include <atomic>
 #include <latch>
 #include <memory>
-#include <mutex>
-#include <queue>
-#include <semaphore>
 #include <string>
 #include <thread>
 #include <unordered_map>
 
+#include "channel/channel.hpp"
 #include "threading/events.hpp"
 #include "timers/timer.hpp"
 
@@ -23,7 +21,11 @@ using UniqueThreadEvent = std::unique_ptr<ThreadEvent>;
 class Thread
 {
 public:
-    Thread(const std::string& threadName, const TimeMS& handleEventThreshold = 20ms);
+    Thread(
+        const std::string& threadName, const TimeMS& handleEventThreshold = 20ms,
+        // must always be last
+        Channel::ChannelPair<ThreadEvent> channel = Channel::MakeChannel<ThreadEvent>()
+    );
 
     virtual ~Thread();
 
@@ -64,22 +66,19 @@ private:
     Thread& operator=(Thread&&) = delete;
 
     // thread entry point
-    void Enter();
+    void Enter(std::unique_ptr<Channel::Rx<ThreadEvent>> rx);
 
     // main thread loop
-    int Execute();
+    int Execute(std::unique_ptr<Channel::Rx<ThreadEvent>> rx);
 
-    void ProcessEvents();
+    void ProcessEvents(Channel::Rx<ThreadEvent>& rx);
 
     // For loop back events for managing this thread
     void HandleSelfEvent(UniqueThreadEvent event);
 
 private:
     const std::string m_threadName;
-    std::jthread m_thread;
-    std::binary_semaphore m_eventSignal{ 0 };
-    std::mutex m_eventQueueMtx{};
-    std::queue<UniqueThreadEvent> m_eventQueue{};
+    std::shared_ptr<Channel::Tx<ThreadEvent>> m_tx;
     const TimeMS m_handleEventThreshold;
     std::unordered_map<TimerEvent::EventID, std::unique_ptr<Timer>> m_timers{};
     std::atomic<int> m_exitCode{ 0 };
@@ -87,6 +86,9 @@ private:
     std::atomic<bool> m_running{ false };
     std::atomic<bool> m_stopping{ false };
     std::unique_ptr<FireOnceTimer> m_stopTimer{ nullptr };
+
+    // must always be last
+    std::jthread m_thread;
 
 private:
     static constexpr size_t MAX_EVENTS_PER_LOOP{ 10 };

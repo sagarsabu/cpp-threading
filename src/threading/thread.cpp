@@ -1,15 +1,23 @@
 #include "threading/thread.hpp"
+#include "channel/channel.hpp"
 #include "log/logger.hpp"
 #include "threading/events.hpp"
 #include "timers/scoped_deadline.hpp"
 
+#include <algorithm>
+#include <memory>
+#include <utility>
+
 namespace Sage::Threading
 {
 
-Thread::Thread(const std::string& threadName, const TimeMS& handleEventThreshold) :
+Thread::Thread(
+    const std::string& threadName, const TimeMS& handleEventThreshold, Channel::ChannelPair<ThreadEvent> channel
+) :
     m_threadName{ threadName },
-    m_thread{ &Thread::Enter, this },
-    m_handleEventThreshold{ handleEventThreshold }
+    m_tx{ std::move(channel.tx) },
+    m_handleEventThreshold{ handleEventThreshold },
+    m_thread{ &Thread::Enter, this, std::move(channel.rx) }
 {
     LOG_DEBUG("{} c'tor", Name());
 }
@@ -24,9 +32,6 @@ void Thread::Start()
 
 void Thread::Stop()
 {
-    // Hold the lock so no other events can come in
-    std::lock_guard lock{ m_eventQueueMtx };
-
     LOG_INFO("{} stop requested", Name());
 
     if (m_stopping)
@@ -35,22 +40,11 @@ void Thread::Stop()
         return;
     }
 
-    // Clear anything in the queue so we get a faster exit
-    if (not m_eventQueue.empty())
-    {
-        LOG_WARNING("{} flushing {} events", Name(), m_eventQueue.size());
-        while (not m_eventQueue.empty())
-        {
-            m_eventQueue.pop();
-        }
-        LOG_TRACE("{} flushed all events", Name());
-    }
-
-    m_eventQueue.emplace(std::make_unique<ExitEvent>());
-    m_eventSignal.release();
-
     // Stop anymore events coming in
     m_stopping = true;
+
+    // Clear anything in the queue so we get a faster exit
+    m_tx->flushAndSend(std::make_unique<ExitEvent>());
 }
 
 void Thread::TransmitEvent(UniqueThreadEvent event)
@@ -61,12 +55,7 @@ void Thread::TransmitEvent(UniqueThreadEvent event)
         return;
     }
 
-    {
-        std::lock_guard lock{ m_eventQueueMtx };
-        m_eventQueue.emplace(std::move(event));
-    }
-
-    m_eventSignal.release();
+    m_tx->send(std::move(event));
 }
 
 void Thread::AddPeriodicTimer(TimerEvent::EventID timerEventId, TimeNS period)
@@ -139,62 +128,44 @@ void Thread::StopTimer(TimerEvent::EventID timerEventId) const
     itr->second->Stop();
 }
 
-int Thread::Execute()
+int Thread::Execute(std::unique_ptr<Channel::Rx<ThreadEvent>> rx)
 {
     std::atomic<bool> readyToExit{ false };
     std::stop_token stopToken{ m_thread.get_stop_token() };
     // Will be execute on this thread via exit event handling
     std::stop_callback stopCb(
         stopToken,
-        [this, &readyToExit]
+        [this, &readyToExit, &rx]
         {
             LOG_INFO("{} stop callback triggered", Name());
 
             readyToExit = true;
             // notify ourselves to wake up
-            m_eventSignal.release();
+            rx->wakeImmediately();
         }
     );
 
     while (not readyToExit)
     {
-        ProcessEvents();
+        ProcessEvents(*rx);
     }
 
     return 0;
 }
 
-void Thread::ProcessEvents()
+void Thread::ProcessEvents(Channel::Rx<ThreadEvent>& rx)
 {
-    bool hasEvent{ m_eventSignal.try_acquire_for(PROCESS_EVENTS_WAIT_TIMEOUT) };
-    if (not hasEvent)
+    auto [events, eventLeftInQueue]{ rx.tryReceiveLimitedMany(PROCESS_EVENTS_WAIT_TIMEOUT, MAX_EVENTS_PER_LOOP) };
+    if (events.empty())
     {
-        // Timeout
         return;
     }
 
     // Only start the deadline if there are events to process
     ScopedDeadline processDeadline{ m_threadName + "@ProcessEvents", PROCESS_EVENTS_THRESHOLD };
-    size_t eventsQueued{ 0 };
+
+    for (auto& threadEvent : events)
     {
-        std::lock_guard lock{ m_eventQueueMtx };
-        eventsQueued = m_eventQueue.size();
-    }
-
-    // Don't hold other threads from pushing events to this thread
-    size_t eventsForThisLoop{ std::min(eventsQueued, MAX_EVENTS_PER_LOOP) };
-    bool tooManyEvents = eventsQueued > MAX_EVENTS_PER_LOOP;
-
-    for (size_t eventsHandled{ 0 }; eventsHandled < eventsForThisLoop; eventsHandled++)
-    {
-        UniqueThreadEvent threadEvent{ nullptr };
-        {
-            // Lock only for the smallest scope so other threads aren't blocked when transmitting
-            std::lock_guard lock{ m_eventQueueMtx };
-            threadEvent = std::move(m_eventQueue.front());
-            m_eventQueue.pop();
-        }
-
         if (threadEvent == nullptr) [[unlikely]]
         {
             LOG_ERROR("{} process-events received null event for receiver", Name());
@@ -220,21 +191,21 @@ void Thread::ProcessEvents()
         }
     }
 
-    if (tooManyEvents)
+    // too many events ?
+    if (eventLeftInQueue > 0)
     {
         // More to do on next loop so notify ourselves
         LOG_WARNING(
-            "{} process-events max events exceeded threshold:{} events-this-loop:{} n-received-events:{}",
+            "{} process-events max events exceeded threshold:{} n-events-left:{}",
             Name(),
             MAX_EVENTS_PER_LOOP,
-            eventsForThisLoop,
-            eventsQueued
+            eventLeftInQueue
         );
-        m_eventSignal.release();
+        rx.wakeImmediately();
     }
     else
     {
-        LOG_TRACE("{} process-events n-received-events:{}", Name(), eventsForThisLoop);
+        LOG_TRACE("{} process-events n-received-events:{}", Name(), events.size());
     }
 }
 
@@ -280,7 +251,7 @@ void Thread::HandleSelfEvent(UniqueThreadEvent threadEvent)
     }
 }
 
-void Thread::Enter()
+void Thread::Enter(std::unique_ptr<Channel::Rx<ThreadEvent>> rx)
 {
     pthread_setname_np(pthread_self(), Name().c_str());
 
@@ -293,7 +264,7 @@ void Thread::Enter()
     Starting();
 
     LOG_INFO("{} executing ", Name());
-    m_exitCode = Execute();
+    m_exitCode = Execute(std ::move(rx));
 
     LOG_INFO("{} stopping", Name());
     Stopping();

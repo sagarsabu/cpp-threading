@@ -82,6 +82,9 @@ std::jthread Create(ExitHandle&& theExitHandle)
                     case EAGAIN:
                         break;
 
+                    case EINTR:
+                        break;
+
                     default:
                         LOG_CRITICAL("sigwait failed when waiting for exit. e: {}", strerror(err));
                         break;

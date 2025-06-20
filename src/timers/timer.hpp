@@ -3,6 +3,7 @@
 #include <chrono>
 #include <ctime>
 #include <functional>
+#include <linux/time_types.h>
 
 namespace Sage
 {
@@ -12,7 +13,7 @@ using namespace std::chrono_literals;
 
 // Useful aliases
 
-using Clock = std::chrono::high_resolution_clock;
+using Clock = std::chrono::steady_clock;
 using TimeNS = std::chrono::nanoseconds;
 using TimeUS = std::chrono::microseconds;
 using TimeMS = std::chrono::milliseconds;
@@ -25,6 +26,13 @@ constexpr timespec ChronoTimeToTimeSpec(const TimeNS& duration) noexcept
     const TimeS seconds{ std::chrono::duration_cast<TimeS>(duration) };
     const TimeNS nanoSecs{ duration };
     return timespec{ seconds.count(), (nanoSecs - seconds).count() };
+}
+
+constexpr __kernel_timespec ChronoTimeToKernelTimeSpec(const TimeNS& duration) noexcept
+{
+    const TimeS seconds{ std::chrono::duration_cast<TimeS>(duration) };
+    const TimeNS nanoSecs{ duration };
+    return __kernel_timespec{ .tv_sec = seconds.count(), .tv_nsec = (nanoSecs - seconds).count() };
 }
 
 // Base timer
