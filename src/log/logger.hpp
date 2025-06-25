@@ -7,6 +7,7 @@
 #include <string>
 #include <syncstream>
 
+#include "log/log_levels.hpp"
 #include "log/log_stream.hpp"
 
 namespace Sage
@@ -56,10 +57,10 @@ std::string_view CurrentThreadName() noexcept;
 
 inline bool ShouldLog(Level level) noexcept { return level >= GetLogStreamer().GetLogLevel(); }
 
-template<typename... Args>
-inline void LogToStream(Level level, const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
+template<Level LOG_LEVEl, typename... Args>
+inline void LogToStream(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
 {
-    if (not Internal::ShouldLog(level))
+    if (not Internal::ShouldLog(LOG_LEVEl))
         return;
 
     LogTimestamp ts{ GetCurrentTimeStamp() };
@@ -68,53 +69,17 @@ inline void LogToStream(Level level, const std::source_location& loc, std::forma
     std::println(
         stream,
         "{}[{}{}] [{}] [{}] [{}:{}] {}{}",
-        GetLevelFormatter(level),
+        GetLevelFormatter(LOG_LEVEl),
         ts.m_s,
         ts.m_ns,
         CurrentThreadName(),
-        GetLevelName(level),
+        GetLevelName(LOG_LEVEl),
         GetFilenameStem(loc.file_name()),
         loc.line(),
         std::format(fmt, std::forward_like<Args>(args)...),
         GetFormatEnd()
     );
     std::flush(stream);
-}
-
-template<typename... Args>
-inline void Trace(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
-{
-    Logger::Internal::LogToStream(Logger::Trace, loc, fmt, std::forward_like<Args>(args)...);
-}
-
-template<typename... Args>
-inline void Debug(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
-{
-    Logger::Internal::LogToStream(Logger::Debug, loc, fmt, std::forward_like<Args>(args)...);
-}
-
-template<typename... Args>
-inline void Info(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
-{
-    Logger::Internal::LogToStream(Logger::Info, loc, fmt, std::forward_like<Args>(args)...);
-}
-
-template<typename... Args>
-inline void Warning(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
-{
-    Logger::Internal::LogToStream(Logger::Warning, loc, fmt, std::forward_like<Args>(args)...);
-}
-
-template<typename... Args>
-inline void Error(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
-{
-    Logger::Internal::LogToStream(Logger::Error, loc, fmt, std::forward_like<Args>(args)...);
-}
-
-template<typename... Args>
-inline void Critical(const std::source_location& loc, std::format_string<Args...> fmt, Args&&... args)
-{
-    Logger::Internal::LogToStream(Logger::Critical, loc, fmt, std::forward_like<Args>(args)...);
 }
 
 constexpr void Noop() {}
@@ -129,19 +94,23 @@ constexpr void Noop() {}
 
 #define LOG_TRACE(fmt, ...)                                                                                            \
     if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Trace)) [[unlikely]]                                           \
-    Sage::Logger::Internal::Trace(std::source_location::current(), fmt, ##__VA_ARGS__)
+    Sage::Logger::Internal::LogToStream<Sage::Logger::Trace>(std::source_location::current(), fmt, ##__VA_ARGS__)
 
 #define LOG_DEBUG(fmt, ...)                                                                                            \
     if (Sage::Logger::Internal::ShouldLog(Sage::Logger::Debug)) [[unlikely]]                                           \
-    Sage::Logger::Internal::Debug(std::source_location::current(), fmt, ##__VA_ARGS__)
+    Sage::Logger::Internal::LogToStream<Sage::Logger::Debug>(std::source_location::current(), fmt, ##__VA_ARGS__)
 
-#define LOG_INFO(fmt, ...) Sage::Logger::Internal::Info(std::source_location::current(), fmt, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...)                                                                                             \
+    Sage::Logger::Internal::LogToStream<Sage::Logger::Info>(std::source_location::current(), fmt, ##__VA_ARGS__)
 
-#define LOG_WARNING(fmt, ...) Sage::Logger::Internal::Warning(std::source_location::current(), fmt, ##__VA_ARGS__)
+#define LOG_WARNING(fmt, ...)                                                                                          \
+    Sage::Logger::Internal::LogToStream<Sage::Logger::Warning>(std::source_location::current(), fmt, ##__VA_ARGS__)
 
-#define LOG_ERROR(fmt, ...) Sage::Logger::Internal::Error(std::source_location::current(), fmt, ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...)                                                                                            \
+    Sage::Logger::Internal::LogToStream<Sage::Logger::Error>(std::source_location::current(), fmt, ##__VA_ARGS__)
 
-#define LOG_CRITICAL(fmt, ...) Sage::Logger::Internal::Critical(std::source_location::current(), fmt, ##__VA_ARGS__)
+#define LOG_CRITICAL(fmt, ...)                                                                                         \
+    Sage::Logger::Internal::LogToStream<Sage::Logger::Critical>(std::source_location::current(), fmt, ##__VA_ARGS__)
 
 #define LOG_IF(check, logMacro)                                                                                        \
     if ((check)) [[unlikely]]                                                                                          \
